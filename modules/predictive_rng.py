@@ -133,3 +133,31 @@ def find_shiny_pids(
         for candidate in iter_pid_candidates(initial_seed, trainer_id, secret_id, count)
         if candidate.is_shiny
     ]
+
+
+@dataclass(frozen=True)
+class LiveRngSnapshot:
+    """RNG and trainer IDs read from the currently running PokéBot emulator."""
+
+    seed: int
+    trainer_id: int
+    secret_id: int
+
+
+def read_live_rng_snapshot() -> LiveRngSnapshot:
+    """Read the current Gen III RNG state and player IDs from PokéBot's emulator.
+
+    Call this only after a profile and emulator have been initialized. The seed is
+    a snapshot of the RNG at that instant; it does not by itself identify which
+    future RNG calls will produce the next encounter.
+    """
+    from modules.memory import read_symbol, unpack_uint32
+    from modules.player import get_player
+
+    seed = unpack_uint32(read_symbol("gRngValue", size=4))
+    player = get_player()
+    return LiveRngSnapshot(
+        seed=seed,
+        trainer_id=player.trainer_id,
+        secret_id=player.secret_id,
+    )
