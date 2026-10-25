@@ -246,7 +246,7 @@ def search_pid_targets(
     if result_limit == 0:
         return []
 
-    matches: list[PidSearchResult] =
+    matches: list[PidSearchResult] = []
     for candidate in iter_pid_candidates(initial_seed, trainer_id, secret_id, candidate_limit):
         pid = candidate.personality_value
         if target.matches(pid, trainer_id, secret_id):
