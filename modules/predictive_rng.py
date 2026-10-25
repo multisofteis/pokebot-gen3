@@ -161,3 +161,102 @@ def read_live_rng_snapshot() -> LiveRngSnapshot:
         trainer_id=player.trainer_id,
         secret_id=player.secret_id,
     )
+
+
+@dataclass(frozen=True)
+class PidTarget:
+    """Optional target constraints that can be evaluated from a PID alone.
+
+    Values are generation-agnostic filters over the PID stream. IVs, encounter
+    slot/species, levels, and exact encounter counts require encounter-method
+    modeling and are intentionally not inferred here.
+    """
+
+    shiny: bool | None = None
+    nature_index: int | None = None
+    gender: str | None = None
+    gender_ratio: int | None = None
+    ability_slot: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.nature_index is not None and not 0 <= self.nature_index < 25:
+            raise ValueError("nature_index must be in the range 0..24")
+        if self.gender is not None and self.gender not in ("male", "female", "genderless"):
+            raise ValueError("gender must be 'male', 'female', or 'genderless'")
+        if self.gender_ratio is not None and not 0 <= self.gender_ratio <= 255:
+            raise ValueError("gender_ratio must be in the range 0..255")
+        if self.ability_slot is not None and self.ability_slot not in (0, 1):
+            raise ValueError("ability_slot must be 0 or 1")
+        if self.gender is not None and self.gender_ratio is None:
+            raise ValueError("gender_ratio is required when filtering by gender")
+
+    def matches(self, pid: int, trainer_id: int, secret_id: int) -> bool:
+        pid &= _MASK_32
+        if self.shiny is not None and is_shiny_pid(pid, trainer_id, secret_id) != self.shiny:
+            return False
+        if self.nature_index is not None and pid % 25 != self.nature_index:
+            return False
+        if self.ability_slot is not None and (pid & 1) != self.ability_slot:
+            return False
+        if self.gender is not None:
+            ratio = self.gender_ratio
+            assert ratio is not None
+            if ratio == 255:
+                actual_gender = "genderless"
+            elif ratio == 0:
+                actual_gender = "male"
+            elif ratio == 254:
+                actual_gender = "female"
+            else:
+                actual_gender = "male" if (pid & 0xFF) >= ratio else "female"
+            if actual_gender != self.gender:
+                return False
+        return True
+
+
+@dataclass(frozen=True)
+class PidSearchResult:
+    """A PID-stream match; index is NOT a game frame or encounter count."""
+
+    pid_candidate_index: int
+    personality_value: int
+    shiny_value: int
+    nature_index: int
+    ability_slot: int
+
+
+def search_pid_targets(
+    initial_seed: int,
+    trainer_id: int,
+    secret_id: int,
+    target: PidTarget,
+    candidate_limit: int,
+    result_limit: int = 100,
+) -> list[PidSearchResult]:
+    """Search a simplified consecutive PID stream for arbitrary PID traits.
+
+    The result index counts candidate PID pairs in this model. It must not be
+    displayed as a game frame or number of encounters without a verified
+    encounter-method-specific RNG-call model.
+    """
+    if candidate_limit < 0:
+        raise ValueError("candidate_limit must be non-negative")
+    if result_limit < 0:
+        raise ValueError("result_limit must be non-negative")
+
+    matches: list[PidSearchResult] = []
+    for candidate in iter_pid_candidates(initial_seed, trainer_id, secret_id, candidate_limit):
+        pid = candidate.personality_value
+        if target.matches(pid, trainer_id, secret_id):
+            matches.append(
+                PidSearchResult(
+                    pid_candidate_index=candidate.pid_index,
+                    personality_value=pid,
+                    shiny_value=candidate.shiny_value,
+                    nature_index=pid % 25,
+                    ability_slot=pid & 1,
+                )
+            )
+            if len(matches) >= result_limit:
+                break
+    return matches
