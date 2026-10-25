@@ -32,3 +32,25 @@ def test_generation_three_shiny_pid_math():
     assert shiny_value(pid, trainer_id, secret_id) == 0
     assert is_shiny_pid(pid, trainer_id, secret_id)
     assert not is_shiny_pid(0, 0, 100)
+
+
+
+def test_generic_pid_target_filters():
+    from modules.predictive_rng import PidTarget
+
+    tid = 1234
+    sid = 5678
+    shiny_pid = ((tid ^ sid) << 16)
+
+    assert PidTarget(shiny=True).matches(shiny_pid, tid, sid)
+    assert PidTarget(shiny=False).matches(0, 0, 100)
+    assert PidTarget(nature_index=shiny_pid % 25).matches(shiny_pid, tid, sid)
+    assert PidTarget(ability_slot=shiny_pid & 1).matches(shiny_pid, tid, sid)
+
+
+def test_gender_pid_target_filters():
+    from modules.predictive_rng import PidTarget
+
+    # A species with gender_ratio 0 is always male; 255 is genderless.
+    assert PidTarget(gender="male", gender_ratio=0).matches(0, 0, 0)
+    assert PidTarget(gender="genderless", gender_ratio=255).matches(0, 0, 0)
