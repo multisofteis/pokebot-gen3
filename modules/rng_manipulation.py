@@ -80,10 +80,19 @@ class SearchCriteria:
     min_ivs: tuple[int, int, int, int, int, int] = (0, 0, 0, 0, 0, 0)
     max_ivs: tuple[int, int, int, int, int, int] = (31, 31, 31, 31, 31, 31)
     pid: int | None = None
+    gender: str | None = None
+    ability_slot: int | None = None
+    gender_ratio: int = 31
 
     def __post_init__(self) -> None:
         if self.nature is not None and self.nature not in NATURES:
             raise ValueError(f"Unknown nature: {self.nature}")
+        if self.gender not in (None, "male", "female"):
+            raise ValueError("Gender must be 'male', 'female', or None")
+        if self.ability_slot not in (None, 0, 1):
+            raise ValueError("Ability slot must be 0, 1, or None")
+        if not 0 <= self.gender_ratio <= 255:
+            raise ValueError("Gender ratio must be between 0 and 255")
         if (self.tid is None) != (self.sid is None):
             raise ValueError("TID and SID must either both be provided or both omitted")
         if self.shiny is not None and self.tid is None:
@@ -137,6 +146,19 @@ def _matches(frame: Method1Frame, criteria: SearchCriteria) -> bool:
             raise ValueError("A shiny filter requires both TID and SID")
         if frame.is_shiny != criteria.shiny:
             return False
+    if criteria.gender is not None:
+        if criteria.gender_ratio == 0:
+            gender = "male"
+        elif criteria.gender_ratio == 254:
+            gender = "female"
+        elif criteria.gender_ratio == 255:
+            gender = None
+        else:
+            gender = "male" if (frame.pid & 0xFF) >= criteria.gender_ratio else "female"
+        if gender != criteria.gender:
+            return False
+    if criteria.ability_slot is not None and (frame.pid & 1) != criteria.ability_slot:
+        return False
     return all(
         low <= iv <= high
         for iv, low, high in zip(frame.ivs, criteria.min_ivs, criteria.max_ivs)
@@ -218,3 +240,40 @@ def set_live_rng_seed(seed: int) -> None:
     if not (context.rom.is_frlg):
         raise RuntimeError("Live RNG targeting is currently enabled only for FireRed/LeafGreen")
     write_symbol("gRngValue", pack_uint32(seed))
+
+
+
+def recover_method1_pre_pid_seed(pid: int) -> int | None:
+    """Recover the RNG state immediately before Method 1 PID generation.
+
+    The PID contains the upper 16 bits from two consecutive RNG states. Brute
+    forcing the missing lower 16 bits of the first state is cheap (65,536 cases).
+    Returns None if no unique candidate is found.
+    """
+    pid_high = (pid >> 16) & 0xFFFF
+    pid_low = pid & 0xFFFF
+    matches: list[int] = []
+    for lower in range(0x10000):
+        first_state = (pid_high << 16) | lower
+        if (next_seed(first_state) >> 16) == pid_low:
+            matches.append(previous_seed(first_state))
+            if len(matches) > 1:
+                return None
+    return matches[0] if matches else None
+
+
+def seed_distance(start_seed: int, target_seed: int, max_steps: int = 20000) -> int | None:
+    """Return signed LCRNG calls from start_seed to target_seed, within max_steps."""
+    state = start_seed & UINT32_MASK
+    if state == (target_seed & UINT32_MASK):
+        return 0
+    forward = state
+    backward = state
+    for distance in range(1, max_steps + 1):
+        forward = next_seed(forward)
+        if forward == (target_seed & UINT32_MASK):
+            return distance
+        backward = previous_seed(backward)
+        if backward == (target_seed & UINT32_MASK):
+            return -distance
+    return None
