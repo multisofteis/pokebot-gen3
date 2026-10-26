@@ -28,7 +28,7 @@ This is deliberately only a foundation. The simplified consecutive-PID stream do
 
 ### Live diagnostics
 
-At startup, the bot now attempts a read-only snapshot and prints the active game, `gRngValue` seed, TID, SID, and emulator frame to the console (including in headless mode). If the GUI is enabled, `Debug > Read Live RNG Snapshot` performs another on-demand read and displays the same values in the console and status message. A failed read is reported as an error instead of being presented as valid data. These diagnostics confirm that the read path runs; they do not validate future encounter predictions.
+At startup, and every 30 seconds while running, the bot attempts a read-only snapshot and prints the active game, `gRngValue` seed, TID, SID, and emulator frame to the console (including in headless mode). If the GUI is enabled, `Debug > Read Live RNG Snapshot` performs another on-demand read and displays the same values in the console and status message. A failed read is reported as an error instead of being presented as valid data. These diagnostics confirm that the read path runs; they do not validate future encounter predictions.
 
 ## Implementation milestones
 
