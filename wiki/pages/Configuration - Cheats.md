@@ -8,7 +8,7 @@
 
 Cheats will cause the bot to perform actions not possible by a human, such as peeking into eggs to check shininess, knowing instantly which route a roamer is on, instantly locate Feebas tiles etc.
 
-RNG manipulation options may be added to the bot in the future, all cheats are disabled by default.
+All cheats are disabled by default. A developer-level Gen III Method 1 search helper is available in [FireRed RNG Search](FireRed%20RNG%20Search.md); automatic target execution is not yet wired into a bot mode.
 
 `random_soft_reset_rng` - advances `gRngValue` to the next unique value while using soft-reset methods
 - Removes all delays before selecting the Pokémon, preventing resets from progressively slowing down over time as the bot waits for unique frames
