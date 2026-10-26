@@ -184,6 +184,7 @@ def run_frlg() -> Generator:
             encounter,
             disable_auto_catch=True,
             do_not_log_battle_action=True,
+            do_not_switch_to_manual=True,
         )
 
         actual_ivs = starter_pokemon.ivs
