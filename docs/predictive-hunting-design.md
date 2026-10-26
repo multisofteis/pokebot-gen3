@@ -26,6 +26,10 @@ Let the user play to a desired location and select a hunting method. The tool sh
 
 This is deliberately only a foundation. The simplified consecutive-PID stream does not model exact wild encounter generation and must not yet be treated as a PokéFinder-equivalent frame search. IV filtering, encounter tables, levels, and accurate encounter counts require the exact generation method and all intervening RNG calls to be modeled.
 
+### Experimental PID candidate search
+
+The GUI debug menu also has an **Experimental PID Candidate Search** command. It asks for a shiny filter, PID-derived nature index, ability slot, scan limit, and result limit, then searches from a fresh live seed snapshot. In headless mode, it prompts in the console. This is explicitly a simplified PID-stream exploration tool: its candidate index is not a frame or encounter count, and results do not guarantee a species, IVs, encounter slot, or a legal future wild encounter. The UI must not be presented as PokéFinder-equivalent until the selected game's real encounter call sequence is implemented and validated.
+
 ### Live diagnostics
 
 At startup, and every 30 seconds while running, the bot attempts a read-only snapshot and prints the active game, `gRngValue` seed, TID, SID, and emulator frame to the console (including in headless mode). If the GUI is enabled, `Debug > Read Live RNG Snapshot` performs another on-demand read and displays the same values in the console and status message. A failed read is reported as an error instead of being presented as valid data. These diagnostics confirm that the read path runs; they do not validate future encounter predictions.
