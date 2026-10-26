@@ -146,7 +146,18 @@ def run_frlg() -> Generator:
         # The starter is now in the party. Recover the pre-PID seed from its PID
         # and update the timing offset for the next reset if this attempt missed.
         starter_pokemon = get_party()[0]
-        actual_pre_pid_seed = recover_method1_pre_pid_seed(starter_pokemon.personality_value)
+        observed_ivs = starter_pokemon.ivs
+        observed_iv_values = (
+            observed_ivs.hp,
+            observed_ivs.attack,
+            observed_ivs.defence,
+            observed_ivs.speed,
+            observed_ivs.special_attack,
+            observed_ivs.special_defence,
+        )
+        actual_pre_pid_seed = recover_method1_pre_pid_seed(
+            starter_pokemon.personality_value, observed_iv_values
+        )
         if actual_pre_pid_seed is not None:
             measured_offset = seed_distance(trigger_seed, actual_pre_pid_seed, max_steps=20000)
             if measured_offset is not None and measured_offset > 0:
