@@ -1,4 +1,5 @@
 import tkinter
+from tkinter import simpledialog
 import webbrowser
 import zlib
 from datetime import datetime
@@ -37,7 +38,7 @@ from modules.modes import BotListener, BotMode, FrameInfo
 from modules.player import get_player
 from modules.pokemon import get_opponent
 from modules.pokemon_party import get_party, get_party_size
-from modules.predictive_rng import read_live_rng_snapshot
+from modules.predictive_rng import PidTarget, read_live_rng_snapshot, search_pid_targets
 from modules.runtime import get_sprites_path, get_base_path
 
 
@@ -162,6 +163,128 @@ def _show_live_rng_snapshot() -> None:
         message = f"Live RNG snapshot failed: {type(error).__name__}: {error}"
         console.print(f"[bold red]{message}[/]")
         context.message = message
+
+
+
+def _search_pid_candidates() -> None:
+    """Search the experimental PID stream; this is not an encounter predictor."""
+    from rich.prompt import Prompt
+    from modules.console import console
+
+    def ask_text(title: str, prompt: str, default: str) -> str | None:
+        if context.gui.is_headless:
+            return Prompt.ask(prompt, default=default)
+        return simpledialog.askstring(title, prompt, initialvalue=default, parent=context.gui.window)
+
+    shiny_text = ask_text(
+        "Experimental PID Search",
+        "Shiny filter (any/shiny/not shiny)",
+        "shiny",
+    )
+    if shiny_text is None:
+        return
+    shiny_text = shiny_text.strip().lower()
+    shiny_options = {"any": None, "shiny": True, "not shiny": False, "not-shiny": False, "n": False}
+    if shiny_text not in shiny_options:
+        context.message = "Cancelled: shiny filter must be any, shiny, or not shiny."
+        return
+
+    nature_text = ask_text(
+        "Experimental PID Search",
+        "Nature index 0-24, or 'any' (PID % 25; this is an index, not a nature name)",
+        "any",
+    )
+    if nature_text is None:
+        return
+    try:
+        nature_index = None if nature_text.strip().lower() == "any" else int(nature_text)
+        if nature_index is not None and not 0 <= nature_index < 25:
+            raise ValueError
+    except ValueError:
+        context.message = "Cancelled: nature index must be 'any' or an integer from 0 to 24."
+        return
+
+    ability_text = ask_text(
+        "Experimental PID Search",
+        "Ability slot (any/0/1)",
+        "any",
+    )
+    if ability_text is None:
+        return
+    ability_text = ability_text.strip().lower()
+    if ability_text not in ("any", "0", "1"):
+        context.message = "Cancelled: ability slot must be any, 0, or 1."
+        return
+
+    count_text = ask_text(
+        "Experimental PID Search",
+        "How many simplified PID candidates to scan (1-1,000,000)",
+        "100000",
+    )
+    if count_text is None:
+        return
+    try:
+        candidate_limit = int(count_text)
+        if not 1 <= candidate_limit <= 1_000_000:
+            raise ValueError
+    except ValueError:
+        context.message = "Cancelled: candidate count must be an integer from 1 to 1,000,000."
+        return
+
+    result_text = ask_text(
+        "Experimental PID Search",
+        "Maximum matches to show (1-100)",
+        "20",
+    )
+    if result_text is None:
+        return
+    try:
+        result_limit = int(result_text)
+        if not 1 <= result_limit <= 100:
+            raise ValueError
+    except ValueError:
+        context.message = "Cancelled: result limit must be an integer from 1 to 100."
+        return
+
+    try:
+        snapshot = read_live_rng_snapshot()
+        target = PidTarget(
+            shiny=shiny_options[shiny_text],
+            nature_index=nature_index,
+            ability_slot=None if ability_text == "any" else int(ability_text),
+        )
+        matches = search_pid_targets(
+            snapshot.seed,
+            snapshot.trainer_id,
+            snapshot.secret_id,
+            target,
+            candidate_limit,
+            result_limit,
+        )
+    except Exception as error:
+        context.message = f"Experimental PID search failed: {type(error).__name__}: {error}"
+        console.print(f"[bold red]{context.message}[/]")
+        return
+
+    console.print(
+        "[bold yellow]EXPERIMENTAL PID STREAM SEARCH — NOT WILD ENCOUNTER PREDICTIONS[/]"
+    )
+    console.print(
+        f"Seed 0x{snapshot.seed:08X} | TID {snapshot.trainer_id} | SID {snapshot.secret_id} | "
+        f"Candidates scanned up to {candidate_limit:,} | Matches {len(matches):,}"
+    )
+    for result in matches:
+        console.print(
+            f"PID index {result.pid_candidate_index:,} | PID 0x{result.personality_value:08X} | "
+            f"Shiny value {result.shiny_value} | Nature index {result.nature_index} | "
+            f"Ability slot {result.ability_slot}"
+        )
+    if not matches:
+        console.print("No matches found in the searched candidate range.")
+    context.message = (
+        f"Experimental PID stream search finished: {len(matches)} match(es). "
+        "These are not encounter indices or guaranteed Pokémon outcomes."
+    )
 
 def _edit_party() -> None:
     run_edit_party_screen()
@@ -318,6 +441,7 @@ class DebugMenu(Menu):
         self.add_command(label="Edit Item Bag", command=_edit_item_bag)
         self.add_command(label="Edit Pokédex", command=_edit_pokedex)
         self.add_command(label="Read Live RNG Snapshot", command=_show_live_rng_snapshot)
+        self.add_command(label="Experimental PID Candidate Search", command=_search_pid_candidates)
         self.add_separator()
         self.add_command(label="Give Test Party", command=_give_test_party)
         self.add_command(label="Give Test Item Pack", command=_give_test_item_pack)
