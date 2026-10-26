@@ -34,7 +34,7 @@ def _parse_ivs(values: list[str]) -> tuple[tuple[int, ...], tuple[int, ...]]:
     return tuple(minimum), tuple(maximum)
 
 
-def ask_for_starter_rng_target(species_name: str) -> dict[str, Any] | None:
+def ask_for_starter_rng_target(species_name: str, abilities: list[str]) -> dict[str, Any] | None:
     """Ask for shiny/nature/IV/gender/ability-slot target; supports GUI and headless mode."""
     if context.gui.is_headless:
         from rich.prompt import Prompt
@@ -50,7 +50,7 @@ def ask_for_starter_rng_target(species_name: str) -> dict[str, Any] | None:
             for label in ("HP", "Attack", "Defense", "Speed", "Sp. Attack", "Sp. Defense")
         ]
         gender_text = Prompt.ask("Gender", choices=["male", "female", "any"], default="any").lower()
-        ability_text = Prompt.ask("Ability slot", choices=["0", "1", "any"], default="any").lower()
+        ability_text = Prompt.ask("Ability", choices=["any", *abilities], default="any")
         minimum, maximum = _parse_ivs(iv_text)
         return {
             "shiny": {"yes": True, "no": False, "any": None}[shiny_text],
@@ -58,7 +58,7 @@ def ask_for_starter_rng_target(species_name: str) -> dict[str, Any] | None:
             "min_ivs": minimum,
             "max_ivs": maximum,
             "gender": None if gender_text == "any" else gender_text,
-            "ability_slot": None if ability_text == "any" else int(ability_text),
+            "ability": None if ability_text == "any" else ability_text,
         }
 
     import tkinter as tk
@@ -91,7 +91,7 @@ def ask_for_starter_rng_target(species_name: str) -> dict[str, Any] | None:
     add_combo(1, "Shiny", shiny_var, ["yes", "no", "any"])
     add_combo(2, "Nature", nature_var, ["Any", *NATURES])
     add_combo(3, "Gender", gender_var, ["Any", "male", "female"])
-    add_combo(4, "Ability slot", ability_var, ["Any", "0", "1"])
+    add_combo(4, "Ability", ability_var, ["Any", *abilities])
     ttk.Label(frame, text="IVs (exact, range e.g. 20-31, or '-' for any)").grid(
         row=5, column=0, columnspan=2, sticky="w", pady=(8, 3)
     )
@@ -121,7 +121,7 @@ def ask_for_starter_rng_target(species_name: str) -> dict[str, Any] | None:
                 "min_ivs": minimum,
                 "max_ivs": maximum,
                 "gender": None if gender_var.get() == "Any" else gender_var.get(),
-                "ability_slot": None if ability_var.get() == "Any" else int(ability_var.get()),
+                "ability": None if ability_var.get() == "Any" else ability_var.get(),
             }
             window.destroy()
         except (ValueError, KeyError) as error:
