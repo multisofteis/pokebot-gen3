@@ -7,6 +7,7 @@ from modules.rng_manipulation import (
     next_seed,
     previous_seed,
     search_method1,
+    recover_method1_pre_pid_seed,
 )
 
 
@@ -38,6 +39,23 @@ class TestGen3RngManipulation(unittest.TestCase):
         self.assertTrue(matches)
         self.assertEqual(matches[0].advance, 0)
         self.assertEqual(matches[0].ivs, (17, 19, 20, 16, 13, 12))
+
+
+    def test_recover_method1_pre_pid_seed(self):
+        frame = generate_method1(0x2031F790)
+        self.assertEqual(recover_method1_pre_pid_seed(frame.pid), 0x2031F790)
+
+    def test_gender_and_ability_filters(self):
+        frame = generate_method1(0)
+        criteria = SearchCriteria(
+            gender="male",
+            ability="Overgrow",
+            species_abilities=("Overgrow",),
+            gender_ratio=31,
+        )
+        matches = list(search_method1(0, 0, criteria, limit=1))
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].pid, frame.pid)
 
     def test_shiny_filter_requires_ids(self):
         with self.assertRaises(ValueError):
