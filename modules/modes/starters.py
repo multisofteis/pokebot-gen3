@@ -7,7 +7,16 @@ from modules.gui.multi_select_window import Selection, ask_for_choice
 from modules.map_data import MapFRLG, MapRSE
 from modules.menuing import PokemonPartyMenuNavigator, StartMenuNavigator
 from modules.modes.util.walking import navigate_to
-from modules.player import get_player_avatar
+from modules.player import get_player, get_player_avatar
+from modules.rng_manipulation import (
+    SearchCriteria,
+    advance_seed,
+    read_live_rng_seed,
+    recover_method1_pre_pid_seed,
+    search_method1,
+    seed_distance,
+)
+from modules.gui.rng_target_window import ask_for_starter_rng_target
 from modules.pokemon_party import get_party_size, get_party
 from modules.runtime import get_sprites_path
 from modules.save_data import get_save_data
@@ -38,6 +47,26 @@ def run_frlg() -> Generator:
     if starter_choice is None:
         return
 
+    target_input = ask_for_starter_rng_target(starter_choice)
+    if target_input is None:
+        return
+
+    # FireRed starter species have a 31/256 female threshold and one actual ability.
+    # Ability-slot filtering still constrains the PID's ability bit for reproducibility.
+    player = get_player()
+    criteria = SearchCriteria(
+        nature=target_input["nature"],
+        shiny=target_input["shiny"],
+        tid=player.trainer_id,
+        sid=player.secret_id,
+        min_ivs=target_input["min_ivs"],
+        max_ivs=target_input["max_ivs"],
+        gender=target_input["gender"],
+        ability_slot=target_input["ability_slot"],
+        gender_ratio=31,
+    )
+    calibration_offset = 0
+
     while context.bot_mode != "Manual":
         yield from soft_reset()
         starter = starter_choice
@@ -51,30 +80,122 @@ def run_frlg() -> Generator:
             case "Squirtle":
                 yield from navigate_to(map=MapFRLG.PALLET_TOWN_PROFESSOR_OAKS_LAB, coordinates=(9, 5))
         yield from ensure_facing_direction("Up")
-        yield from wait_for_unique_rng_value()
 
-        # Wait for and confirm the first question (the 'Do you choose ...')
+        # Find a matching Method 1 PID/IV frame from the live seed. We time the
+        # first A press against the target's pre-generation state; the calibrated
+        # offset accounts for RNG calls between that press and CreateMon.
+        triggered = False
+        trigger_seed = 0
+        trigger_frame = 0
+        target_frame = 0
+        target_seed = 0
+        while not triggered and context.bot_mode != "Manual":
+            start_seed = read_live_rng_seed()
+            start_frame = context.frame
+            candidates = search_method1(
+                start_seed,
+                1_000_000,
+                criteria,
+                start_advance=max(1, calibration_offset + 1),
+                limit=1,
+                tid=player.trainer_id,
+                sid=player.secret_id,
+            )
+            target = next(candidates, None)
+            if target is None:
+                raise BotModeError(
+                    "No starter RNG frame matched within 1,000,000 advances. "
+                    "Relax the IV filters (use ranges such as 20-31) and try again."
+                )
+
+            target_seed = target.seed
+            trigger_seed = advance_seed(target_seed, -calibration_offset)
+            target_frame = start_frame + target.advance - calibration_offset
+            context.message = (
+                f"Starter RNG search: target frame {target_frame}, "
+                f"seed 0x{target_seed:08X}, calibration offset {calibration_offset}"
+            )
+
+            # The live seed is authoritative. Frame count provides a timeout/replan
+            # guard if game logic consumes extra RNG calls and skips the target state.
+            deadline = target_frame + max(8, abs(calibration_offset) + 8)
+            while context.bot_mode != "Manual":
+                live_seed = read_live_rng_seed()
+                if live_seed == trigger_seed:
+                    trigger_seed = live_seed
+                    trigger_frame = context.frame
+                    context.emulator.press_button("A")
+                    triggered = True
+                    break
+                if context.frame > deadline:
+                    break
+                yield
+
+        if context.bot_mode == "Manual":
+            return
+
+        # Continue normal dialog input after the calibrated first press.
         while get_party_size() == 0:
             context.emulator.press_button("A")
             yield
 
-        # Wait for and say no to the second question (the 'Do you want to give ... a nickname')
+        # The starter is now in the party. Recover the pre-PID seed from its PID
+        # and update the timing offset for the next reset if this attempt missed.
+        starter_pokemon = get_party()[0]
+        actual_pre_pid_seed = recover_method1_pre_pid_seed(starter_pokemon.personality_value)
+        if actual_pre_pid_seed is not None:
+            measured_offset = seed_distance(trigger_seed, actual_pre_pid_seed, max_steps=20000)
+            if measured_offset is not None and measured_offset > 0:
+                calibration_offset = measured_offset
+                context.message = (
+                    f"Starter RNG calibration: measured offset {calibration_offset} calls "
+                    f"(trigger frame {trigger_frame}, target frame {target_frame})."
+                )
+            else:
+                context.message = (
+                    "Starter RNG calibration could not infer a positive call offset; "
+                    "keeping the previous calibration."
+                )
+        else:
+            context.message = "Could not recover a unique Method 1 seed from the starter PID; calibration unchanged."
+
         yield from wait_for_task_to_start_and_finish("Task_YesNoMenu_HandleInput", button_to_press="B")
-
-        # Wait for the rival to pick up their starter
         yield from wait_until_task_is_active("Task_Fanfare", button_to_press="B")
-
-        # Wait for the main menu to pop up
         yield from wait_until_task_is_active("Task_StartMenuHandleInput", button_to_press="Start")
-
-        # Spam 'A' until we see the summary screen
         yield from wait_until_task_is_active("Task_DuckBGMForPokemonCry", button_to_press="A")
 
+        encounter = EncounterInfo.create(starter_pokemon, EncounterType.Gift)
         handle_encounter(
-            EncounterInfo.create(get_party()[0], EncounterType.Gift),
+            encounter,
             disable_auto_catch=True,
             do_not_log_battle_action=True,
         )
+
+        actual_ivs = starter_pokemon.ivs
+        iv_values = (
+            actual_ivs.hp,
+            actual_ivs.attack,
+            actual_ivs.defence,
+            actual_ivs.speed,
+            actual_ivs.special_attack,
+            actual_ivs.special_defence,
+        )
+        matches_target = (
+            (criteria.shiny is None or starter_pokemon.is_shiny == criteria.shiny)
+            and (criteria.nature is None or starter_pokemon.nature.name == criteria.nature)
+            and all(low <= value <= high for value, low, high in zip(iv_values, criteria.min_ivs, criteria.max_ivs))
+            and (criteria.gender is None or starter_pokemon.gender == criteria.gender)
+            and (criteria.ability_slot is None or (starter_pokemon.personality_value & 1) == criteria.ability_slot)
+        )
+        if matches_target:
+            context.message = (
+                f"Starter target matched: {starter_pokemon.species.name}, "
+                f"{starter_pokemon.nature.name}, IVs {iv_values}, "
+                f"gender {starter_pokemon.gender}, shiny={starter_pokemon.is_shiny}."
+            )
+            context.set_manual_mode()
+            return
+        # Non-matches are logged and the loop soft-resets for another calibrated attempt.
 
 
 def run_rse_hoenn(get_active_encounter: Callable[[], EncounterInfo]) -> Generator:
