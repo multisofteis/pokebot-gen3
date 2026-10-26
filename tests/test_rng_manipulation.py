@@ -43,7 +43,7 @@ class TestGen3RngManipulation(unittest.TestCase):
 
     def test_recover_method1_pre_pid_seed(self):
         frame = generate_method1(0x2031F790)
-        self.assertEqual(recover_method1_pre_pid_seed(frame.pid), 0x2031F790)
+        self.assertEqual(recover_method1_pre_pid_seed(frame.pid, frame.ivs), 0x2031F790)
 
     def test_gender_and_ability_filters(self):
         frame = generate_method1(0)
