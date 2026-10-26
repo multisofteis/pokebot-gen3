@@ -249,22 +249,30 @@ def set_live_rng_seed(seed: int) -> None:
 
 
 
-def recover_method1_pre_pid_seed(pid: int) -> int | None:
-    """Recover the RNG state immediately before Method 1 PID generation.
+def recover_method1_pre_pid_seed(
+    pid: int, ivs: tuple[int, int, int, int, int, int] | None = None
+) -> int | None:
+    """Recover the pre-PID RNG state from a Method 1 PID, optionally disambiguating with IVs.
 
-    The PID contains the upper 16 bits from two consecutive RNG states. Brute
-    forcing the missing lower 16 bits of the first state is cheap (65,536 cases).
-    Returns None if no unique candidate is found.
+    The PID gives two consecutive upper-16-bit outputs. Several lower-word
+    candidates can occasionally fit those outputs, so the six observed IVs are
+    used when available to select the actual Method 1 frame.
     """
     pid_high = (pid >> 16) & 0xFFFF
     pid_low = pid & 0xFFFF
     matches: list[int] = []
     for lower in range(0x10000):
         first_state = (pid_high << 16) | lower
-        if (next_seed(first_state) >> 16) == pid_low:
-            matches.append(previous_seed(first_state))
-            if len(matches) > 1:
-                return None
+        if (next_seed(first_state) >> 16) != pid_low:
+            continue
+        pre_pid_seed = previous_seed(first_state)
+        if ivs is not None:
+            frame = generate_method1(pre_pid_seed)
+            if frame.pid != pid or frame.ivs != ivs:
+                continue
+        matches.append(pre_pid_seed)
+        if len(matches) > 1:
+            return None
     return matches[0] if matches else None
 
 
