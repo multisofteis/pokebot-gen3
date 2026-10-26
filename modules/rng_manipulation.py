@@ -86,6 +86,8 @@ class SearchCriteria:
             raise ValueError(f"Unknown nature: {self.nature}")
         if (self.tid is None) != (self.sid is None):
             raise ValueError("TID and SID must either both be provided or both omitted")
+        if self.shiny is not None and self.tid is None:
+            raise ValueError("A shiny filter requires both TID and SID")
         if self.tid is not None and not (0 <= self.tid <= 0xFFFF):
             raise ValueError("TID must be a 16-bit unsigned integer")
         if self.sid is not None and not (0 <= self.sid <= 0xFFFF):
@@ -163,7 +165,7 @@ def search_method1(
         raise ValueError("limit must be positive or None")
     if not 0 <= tid <= 0xFFFF or not 0 <= sid <= 0xFFFF:
         raise ValueError("TID and SID must be 16-bit unsigned integers")
-    if criteria.shiny is not None and criteria.tid is not None:
+    if criteria.tid is not None:
         tid, sid = criteria.tid, criteria.sid
 
     state = advance_seed(seed & UINT32_MASK, start_advance)
