@@ -37,6 +37,7 @@ from modules.modes import BotListener, BotMode, FrameInfo
 from modules.player import get_player
 from modules.pokemon import get_opponent
 from modules.pokemon_party import get_party, get_party_size
+from modules.predictive_rng import read_live_rng_snapshot
 from modules.runtime import get_sprites_path, get_base_path
 
 
@@ -136,6 +137,31 @@ def _export_flags_and_vars() -> None:
     export_flags_and_vars(target_path[0])
     context.message = f"✅ Exported flags and vars to " + target_path[0].replace("\\", "/").split("/")[-1]
 
+
+
+def _show_live_rng_snapshot() -> None:
+    """Display a read-only snapshot of the live RNG seed and trainer IDs."""
+    from modules.console import console
+    from modules.memory import get_game_state
+
+    try:
+        snapshot = read_live_rng_snapshot()
+        game_name = context.rom.game_name if context.rom is not None else "Unknown game"
+        frame_count = context.emulator.get_frame_count() if context.emulator is not None else -1
+        game_state = get_game_state().name
+        message = (
+            f"Live RNG snapshot ({game_name}) | "
+            f"Seed: 0x{snapshot.seed:08X} | "
+            f"TID: {snapshot.trainer_id} (0x{snapshot.trainer_id:04X}) | "
+            f"SID: {snapshot.secret_id} (0x{snapshot.secret_id:04X}) | "
+            f"Frame: {frame_count} | State: {game_state}"
+        )
+        console.print(f"[bold cyan]{message}[/]")
+        context.message = message
+    except Exception as error:
+        message = f"Live RNG snapshot failed: {type(error).__name__}: {error}"
+        console.print(f"[bold red]{message}[/]")
+        context.message = message
 
 def _edit_party() -> None:
     run_edit_party_screen()
@@ -291,6 +317,7 @@ class DebugMenu(Menu):
         self.add_command(label="Edit Party", command=_edit_party)
         self.add_command(label="Edit Item Bag", command=_edit_item_bag)
         self.add_command(label="Edit Pokédex", command=_edit_pokedex)
+        self.add_command(label="Read Live RNG Snapshot", command=_show_live_rng_snapshot)
         self.add_separator()
         self.add_command(label="Give Test Party", command=_give_test_party)
         self.add_command(label="Give Test Item Pack", command=_give_test_item_pack)
