@@ -17,6 +17,7 @@ from modules.rng_manipulation import (
     seed_distance,
 )
 from modules.gui.rng_target_window import ask_for_starter_rng_target
+from modules.pokemon import get_species_by_name
 from modules.pokemon_party import get_party_size, get_party
 from modules.runtime import get_sprites_path
 from modules.save_data import get_save_data
@@ -47,12 +48,17 @@ def run_frlg() -> Generator:
     if starter_choice is None:
         return
 
-    target_input = ask_for_starter_rng_target(starter_choice)
+    starter = starter_choice
+    if starter == "Random":
+        starter = random.choice(["Bulbasaur", "Charmander", "Squirtle"])
+    starter_species = get_species_by_name(starter)
+    ability_names = [ability.name for ability in starter_species.abilities]
+    target_input = ask_for_starter_rng_target(starter, ability_names)
     if target_input is None:
         return
 
-    # FireRed starter species have a 31/256 female threshold and one actual ability.
-    # Ability-slot filtering still constrains the PID's ability bit for reproducibility.
+    # FireRed starters have a 31/256 female threshold. Ability filtering uses
+    # the species' real ability list; these three starters each have one ability.
     player = get_player()
     criteria = SearchCriteria(
         nature=target_input["nature"],
@@ -62,16 +68,14 @@ def run_frlg() -> Generator:
         min_ivs=target_input["min_ivs"],
         max_ivs=target_input["max_ivs"],
         gender=target_input["gender"],
-        ability_slot=target_input["ability_slot"],
+        ability=target_input["ability"],
+        species_abilities=tuple(ability_names),
         gender_ratio=31,
     )
     calibration_offset = 0
 
     while context.bot_mode != "Manual":
         yield from soft_reset()
-        starter = starter_choice
-        if starter == "Random":
-            starter = random.choice(["Bulbasaur", "Charmander", "Squirtle"])
         match starter:
             case "Bulbasaur":
                 yield from navigate_to(map=MapFRLG.PALLET_TOWN_PROFESSOR_OAKS_LAB, coordinates=(8, 5))
@@ -185,7 +189,7 @@ def run_frlg() -> Generator:
             and (criteria.nature is None or starter_pokemon.nature.name == criteria.nature)
             and all(low <= value <= high for value, low, high in zip(iv_values, criteria.min_ivs, criteria.max_ivs))
             and (criteria.gender is None or starter_pokemon.gender == criteria.gender)
-            and (criteria.ability_slot is None or (starter_pokemon.personality_value & 1) == criteria.ability_slot)
+            and (criteria.ability is None or starter_pokemon.ability.name == criteria.ability)
         )
         if matches_target:
             context.message = (
