@@ -11,6 +11,7 @@ from modules.modes import BotMode, BotModeError, FrameInfo, get_bot_listeners, g
 from modules.plugins import plugin_profile_loaded, load_built_in_plugins
 from modules.state_cache import StateCache
 from modules.stats import StatsDatabase
+from modules.predictive_rng import read_live_rng_snapshot
 from modules.tasks import get_global_script_context, get_tasks
 
 # Contains a queue of tasks that should be run the next time a frame completes.
@@ -48,6 +49,24 @@ def main_loop() -> None:
 
         context.state_cache = StateCache()
         context.stats = StatsDatabase(context.profile)
+
+        # Read-only startup diagnostic. This is especially useful in headless mode,
+        # where the GUI debug menu is not available.
+        try:
+            snapshot = read_live_rng_snapshot()
+            console.print(
+                "[bold cyan]Predictive RNG snapshot[/] | "
+                f"Game: {context.rom.game_name} | "
+                f"Seed: 0x{snapshot.seed:08X} | "
+                f"TID: {snapshot.trainer_id} (0x{snapshot.trainer_id:04X}) | "
+                f"SID: {snapshot.secret_id} (0x{snapshot.secret_id:04X}) | "
+                f"Emulator frame: {context.emulator.get_frame_count()}"
+            )
+        except Exception as error:
+            console.print(
+                "[bold yellow]Predictive RNG snapshot unavailable at startup[/]: "
+                f"{type(error).__name__}: {error}"
+            )
 
         # Built-in plugins are only loaded if some bot configuration actually requires them.
         # Since profile configuration can override global configuration, they can only be
