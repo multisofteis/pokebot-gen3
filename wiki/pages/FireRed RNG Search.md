@@ -1,8 +1,9 @@
 # FireRed/LeafGreen RNG search (developer notes)
 
-The first implementation adds a deterministic Gen III LCRNG Method 1 search helper in
-`modules/rng_manipulation.py`. It is deliberately a backend API rather than an automatic
-bot mode until each encounter call site is calibrated.
+The branch now includes a FireRed starter-targeting workflow in `modules/modes/starters.py`.
+It asks for shiny status, nature, IV bounds, gender and ability, searches Method 1 candidates
+from the live RNG seed, times the first starter input against a candidate state, then uses
+the resulting PID and IVs to estimate a timing offset for subsequent resets.
 
 ## Model
 
@@ -37,9 +38,10 @@ for target in search_from_live_rng(1_000_000, criteria, limit=10):
     print(target.advance, hex(target.seed), hex(target.pid), target.ivs)
 ```
 
-A returned advance is an RNG-call count, **not a frame count**. A candidate's
-seed must only be installed immediately before the actual Method 1 generation
-calls. FireRed starters, stationary encounters, and wild encounters can use
-different call sequences/methods; don't apply Method 1 blindly to all of them.
-The first step toward end-to-end targeting is to validate the generation point
-and call count against a known emulator test seed for each encounter type.
+A returned advance is an RNG-call count, **not a frame count**. The starter mode uses the
+frame count as an estimate and checks the live RNG state before pressing A; if the target
+state is skipped, it replans. After the starter is generated, it attempts to recover the
+pre-PID state using the observed PID and IVs, then updates the offset for later resets.
+This is an experimental timing controller and still needs validation against real FireRed
+emulator runs: the exact starter script call sequence, menu timing, and frame-to-RNG-call
+relationship can vary. It currently targets the Method 1 model only.
