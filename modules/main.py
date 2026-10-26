@@ -1,5 +1,6 @@
 import queue
 import sys
+import time
 from collections import deque
 from concurrent.futures import Future
 from typing import Generator, Callable, TypeVar
@@ -35,6 +36,27 @@ class ManualBotMode(BotMode):
         yield
 
 
+def _log_predictive_rng_snapshot(label: str) -> None:
+    """Print a read-only live RNG snapshot without interrupting the bot loop."""
+    try:
+        snapshot = read_live_rng_snapshot()
+        game_name = context.rom.game_name if context.rom is not None else "Unknown game"
+        frame_count = context.emulator.get_frame_count() if context.emulator is not None else -1
+        console.print(
+            f"[bold cyan]Predictive RNG {label}[/] | "
+            f"Game: {game_name} | "
+            f"Seed: 0x{snapshot.seed:08X} | "
+            f"TID: {snapshot.trainer_id} (0x{snapshot.trainer_id:04X}) | "
+            f"SID: {snapshot.secret_id} (0x{snapshot.secret_id:04X}) | "
+            f"Emulator frame: {frame_count}"
+        )
+    except Exception as error:
+        console.print(
+            f"[bold yellow]Predictive RNG {label} snapshot unavailable[/]: "
+            f"{type(error).__name__}: {error}"
+        )
+
+
 def main_loop() -> None:
     """
     This function is run after the user has selected a profile and the emulator has been started.
@@ -50,23 +72,9 @@ def main_loop() -> None:
         context.state_cache = StateCache()
         context.stats = StatsDatabase(context.profile)
 
-        # Read-only startup diagnostic. This is especially useful in headless mode,
-        # where the GUI debug menu is not available.
-        try:
-            snapshot = read_live_rng_snapshot()
-            console.print(
-                "[bold cyan]Predictive RNG snapshot[/] | "
-                f"Game: {context.rom.game_name} | "
-                f"Seed: 0x{snapshot.seed:08X} | "
-                f"TID: {snapshot.trainer_id} (0x{snapshot.trainer_id:04X}) | "
-                f"SID: {snapshot.secret_id} (0x{snapshot.secret_id:04X}) | "
-                f"Emulator frame: {context.emulator.get_frame_count()}"
-            )
-        except Exception as error:
-            console.print(
-                "[bold yellow]Predictive RNG snapshot unavailable at startup[/]: "
-                f"{type(error).__name__}: {error}"
-            )
+        # Read-only diagnostics work in both GUI and headless mode.
+        _log_predictive_rng_snapshot("startup")
+        last_predictive_rng_log = time.monotonic()
 
         # Built-in plugins are only loaded if some bot configuration actually requires them.
         # Since profile configuration can override global configuration, they can only be
@@ -90,6 +98,13 @@ def main_loop() -> None:
         previous_frame_info: FrameInfo | None = None
 
         while True:
+            # Periodic read-only diagnostics are useful in headless mode and emit
+            # only once every 30 seconds to avoid flooding the console.
+            now = time.monotonic()
+            if now - last_predictive_rng_log >= 30.0:
+                _log_predictive_rng_snapshot("periodic")
+                last_predictive_rng_log = now
+
             # Process work queue, which can be used to get the main thread to access the emulator
             # at a 'safe' time (i.e. not in the middle of emulating a frame.)
             while not work_queue.empty():
