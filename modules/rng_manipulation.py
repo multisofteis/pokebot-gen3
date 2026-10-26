@@ -81,7 +81,8 @@ class SearchCriteria:
     max_ivs: tuple[int, int, int, int, int, int] = (31, 31, 31, 31, 31, 31)
     pid: int | None = None
     gender: str | None = None
-    ability_slot: int | None = None
+    ability: str | None = None
+    species_abilities: tuple[str, ...] = ()
     gender_ratio: int = 31
 
     def __post_init__(self) -> None:
@@ -89,8 +90,8 @@ class SearchCriteria:
             raise ValueError(f"Unknown nature: {self.nature}")
         if self.gender not in (None, "male", "female"):
             raise ValueError("Gender must be 'male', 'female', or None")
-        if self.ability_slot not in (None, 0, 1):
-            raise ValueError("Ability slot must be 0, 1, or None")
+        if self.ability is not None and self.species_abilities and self.ability not in self.species_abilities:
+            raise ValueError(f"Ability {self.ability!r} is not available for this species")
         if not 0 <= self.gender_ratio <= 255:
             raise ValueError("Gender ratio must be between 0 and 255")
         if (self.tid is None) != (self.sid is None):
@@ -157,8 +158,13 @@ def _matches(frame: Method1Frame, criteria: SearchCriteria) -> bool:
             gender = "male" if (frame.pid & 0xFF) >= criteria.gender_ratio else "female"
         if gender != criteria.gender:
             return False
-    if criteria.ability_slot is not None and (frame.pid & 1) != criteria.ability_slot:
-        return False
+    if criteria.ability is not None:
+        if not criteria.species_abilities or criteria.ability not in criteria.species_abilities:
+            return False
+        if len(criteria.species_abilities) > 1:
+            ability_slot = frame.pid & 1
+            if criteria.species_abilities[ability_slot] != criteria.ability:
+                return False
     return all(
         low <= iv <= high
         for iv, low, high in zip(frame.ivs, criteria.min_ivs, criteria.max_ivs)
