@@ -35,7 +35,7 @@ def _parse_ivs(values: list[str]) -> tuple[tuple[int, ...], tuple[int, ...]]:
 
 
 def ask_for_starter_rng_target(species_name: str, abilities: list[str]) -> dict[str, Any] | None:
-    """Ask for shiny/nature/IV/gender/ability-slot target; supports GUI and headless mode."""
+    """Ask for shiny/nature/IV/gender/ability target; supports GUI and headless mode."""
     if context.gui.is_headless:
         from rich.prompt import Prompt
 
@@ -103,7 +103,7 @@ def ask_for_starter_rng_target(species_name: str, abilities: list[str]) -> dict[
 
     ttk.Label(
         frame,
-        text="FireRed starters have one actual ability; slot filtering matches the PID ability bit.",
+        text="The selected ability must be available to the chosen starter.",
         wraplength=330,
     ).grid(row=12, column=0, columnspan=2, sticky="w", pady=(8, 4))
 
