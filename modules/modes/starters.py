@@ -114,24 +114,30 @@ def run_frlg() -> Generator:
 
             target_seed = target.seed
             trigger_seed = advance_seed(target_seed, -calibration_offset)
-            target_frame = start_frame + target.advance - calibration_offset
+            expected_rng_calls = target.advance - calibration_offset
             context.message = (
-                f"Starter RNG search: target frame {target_frame}, "
-                f"seed 0x{target_seed:08X}, calibration offset {calibration_offset}"
+                f"Starter RNG search: target seed 0x{target_seed:08X}, "
+                f"about {expected_rng_calls} RNG calls ahead, "
+                f"calibration offset {calibration_offset}"
             )
 
-            # The live seed is authoritative. Frame count provides a timeout/replan
-            # guard if game logic consumes extra RNG calls and skips the target state.
-            deadline = target_frame + max(8, abs(calibration_offset) + 8)
+            # RNG calls are not emulator frames: game code can make zero, one, or
+            # several RNG calls per frame. Never use context.frame as an RNG
+            # deadline. Track the actual seed sequence and re-plan only if the
+            # trigger state has already passed (for example, multiple calls/frame).
             while context.bot_mode != "Manual":
                 live_seed = read_live_rng_seed()
                 if live_seed == trigger_seed:
-                    trigger_seed = live_seed
                     trigger_frame = context.frame
                     context.emulator.press_button("A")
                     triggered = True
                     break
-                if context.frame > deadline:
+
+                distance_to_trigger = seed_distance(
+                    live_seed, trigger_seed, max_steps=20000
+                )
+                if distance_to_trigger is not None and distance_to_trigger < 0:
+                    # We have passed the exact trigger state; re-search from now.
                     break
                 yield
 
