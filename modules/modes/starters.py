@@ -216,7 +216,24 @@ def run_frlg() -> Generator:
             )
             context.set_manual_mode()
             return
-        # Non-matches are logged and the loop soft-resets for another calibrated attempt.
+
+        if actual_pre_pid_seed is None:
+            # Do not silently reset and pretend calibration can improve when the
+            # observed PID/IVs cannot be explained by the assumed Method 1 model.
+            # Keep the encounter available for inspection and surface the evidence
+            # needed to diagnose the generation method before trying another target.
+            context.message = (
+                "Starter RNG calibration stopped: observed encounter did not match "
+                "a unique Method 1 seed. "
+                f"PID=0x{starter_pokemon.personality_value:08X}, "
+                f"nature={starter_pokemon.nature.name}, IVs={iv_values}, "
+                f"trigger seed=0x{trigger_seed:08X}. "
+                "No offset was changed; check the starter's RNG method before retrying."
+            )
+            context.set_manual_mode()
+            return
+        # A recovered Method 1 seed that misses the requested target can be used
+        # to update the offset before the next reset.
 
 
 def run_rse_hoenn(get_active_encounter: Callable[[], EncounterInfo]) -> Generator:
