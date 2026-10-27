@@ -11,7 +11,7 @@ The LCRNG state transition is:
 
 `state = (state * 0x41C64E6D + 0x6073) & 0xFFFFFFFF`
 
-For a Method 1 frame, the next four RNG calls supply PID high word, PID low word,
+For a Method 1 frame, the next four RNG calls supply PID low word, PID high word,
 IV word 1, and IV word 2. IVs are decoded in HP / Attack / Defense / Speed /
 Special Attack / Special Defense order. A Pokémon is shiny when
 `((PID >> 16) ^ (PID & 0xFFFF) ^ TID ^ SID) < 8`.
