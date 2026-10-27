@@ -32,7 +32,7 @@ class TestGen3RngManipulation(unittest.TestCase):
             search_method1(
                 0,
                 1000,
-                SearchCriteria(nature="Quirky", min_ivs=(17, 19, 20, 16, 13, 12)),
+                SearchCriteria(nature="Naive", min_ivs=(17, 19, 20, 16, 13, 12)),
                 limit=1,
             )
         )
