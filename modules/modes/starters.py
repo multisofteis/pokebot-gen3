@@ -91,7 +91,6 @@ def run_frlg() -> Generator:
         triggered = False
         trigger_seed = 0
         trigger_frame = 0
-        target_frame = 0
         target_seed = 0
         while not triggered and context.bot_mode != "Manual":
             start_seed = read_live_rng_seed()
@@ -170,7 +169,7 @@ def run_frlg() -> Generator:
                 calibration_offset = measured_offset
                 context.message = (
                     f"Starter RNG calibration: measured offset {calibration_offset} calls "
-                    f"(trigger frame {trigger_frame}, target frame {target_frame})."
+                    f"(trigger frame {trigger_frame}, planned lead {expected_rng_calls} RNG calls)."
                 )
             else:
                 context.message = (
