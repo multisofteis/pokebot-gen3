@@ -45,6 +45,11 @@ class TestGen3RngManipulation(unittest.TestCase):
         frame = generate_method1(0x2031F790)
         self.assertEqual(recover_method1_pre_pid_seed(frame.pid, frame.ivs), 0x2031F790)
 
+    def test_recover_reported_firered_starter(self):
+        pid = 0xD3B6443E
+        ivs = (16, 20, 6, 2, 28, 27)
+        self.assertEqual(recover_method1_pre_pid_seed(pid, ivs), 0x2AF3F43E)
+
     def test_gender_and_ability_filters(self):
         frame = generate_method1(0)
         criteria = SearchCriteria(
