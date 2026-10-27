@@ -22,8 +22,8 @@ class TestGen3RngManipulation(unittest.TestCase):
 
     def test_method1_generation_known_vector(self):
         frame = generate_method1(0, tid=0, sid=0)
-        self.assertEqual(frame.pid, 59774)
-        self.assertEqual(frame.nature, "Quirky")
+        self.assertEqual(frame.pid, 0xE97E0000)
+        self.assertEqual(frame.nature, "Naive")
         self.assertEqual(frame.ivs, (17, 19, 20, 16, 13, 12))
         self.assertEqual(frame.advance, 0)
 
