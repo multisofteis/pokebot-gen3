@@ -1,7 +1,7 @@
 """Generation III LCRNG search helpers.
 
 The search operates on the RNG state immediately *before* the first PID call.
-For Method 1 encounters, four successive RNG calls produce PID-high, PID-low,
+For Method 1 encounters, four successive RNG calls produce PID-low, PID-high,
 IV-word 1 and IV-word 2. The module is deliberately independent of encounter
 automation so that the call site can be calibrated for each FireRed encounter.
 """
@@ -112,8 +112,9 @@ class SearchCriteria:
 
 def generate_method1(seed: int, advance: int = 0, tid: int = 0, sid: int = 0) -> Method1Frame:
     """Generate a Method 1 PID/IV frame from its pre-generation RNG state."""
-    state, pid_high = _next_u16(seed)
-    state, pid_low = _next_u16(state)
+    # Gen III consumes the first PID half as the low word, then the high word.
+    state, pid_low = _next_u16(seed)
+    state, pid_high = _next_u16(state)
     state, iv_word_1 = _next_u16(state)
     state, iv_word_2 = _next_u16(state)
 
@@ -254,16 +255,17 @@ def recover_method1_pre_pid_seed(
 ) -> int | None:
     """Recover the pre-PID RNG state from a Method 1 PID, optionally disambiguating with IVs.
 
-    The PID gives two consecutive upper-16-bit outputs. Several lower-word
+    The PID gives two consecutive upper-16-bit outputs, low word first. Several lower-word
     candidates can occasionally fit those outputs, so the six observed IVs are
     used when available to select the actual Method 1 frame.
     """
     pid_high = (pid >> 16) & 0xFFFF
     pid_low = pid & 0xFFFF
     matches: list[int] = []
+    # The first Random() output supplies PID-low; the second supplies PID-high.
     for lower in range(0x10000):
-        first_state = (pid_high << 16) | lower
-        if (next_seed(first_state) >> 16) != pid_low:
+        first_state = (pid_low << 16) | lower
+        if (next_seed(first_state) >> 16) != pid_high:
             continue
         pre_pid_seed = previous_seed(first_state)
         if ivs is not None:
