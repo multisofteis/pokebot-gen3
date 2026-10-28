@@ -8,6 +8,8 @@ from modules.rng_manipulation import (
     previous_seed,
     search_method1,
     recover_method1_pre_pid_seed,
+    seed_was_passed,
+    seed_distance,
 )
 
 
@@ -40,6 +42,19 @@ class TestGen3RngManipulation(unittest.TestCase):
         self.assertEqual(matches[0].advance, 0)
         self.assertEqual(matches[0].ivs, (17, 19, 20, 16, 13, 12))
 
+
+    def test_seed_was_passed_between_observations(self):
+        previous = 0x12345678
+        target = advance_seed(previous, 3)
+        current = advance_seed(previous, 5)
+        self.assertTrue(seed_was_passed(previous, current, target))
+        self.assertFalse(seed_was_passed(previous, current, advance_seed(previous, 6)))
+
+    def test_seed_was_passed_handles_unusually_large_jump(self):
+        previous = 0x12345678
+        current = advance_seed(previous, 300)
+        self.assertIsNone(seed_was_passed(previous, current, advance_seed(previous, 200), max_steps=256))
+        self.assertEqual(seed_distance(current, advance_seed(previous, 200), max_steps=20000), -100)
 
     def test_recover_method1_pre_pid_seed(self):
         frame = generate_method1(0x2031F790)
