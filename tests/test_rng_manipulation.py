@@ -4,6 +4,9 @@ from modules.rng_manipulation import (
     SearchCriteria,
     advance_seed,
     generate_method1,
+    generate_method,
+    search_generation_method,
+    recover_pre_pid_seed,
     next_seed,
     previous_seed,
     search_method1,
@@ -55,6 +58,32 @@ class TestGen3RngManipulation(unittest.TestCase):
         current = advance_seed(previous, 300)
         self.assertIsNone(seed_was_passed(previous, current, advance_seed(previous, 290), max_steps=256))
         self.assertEqual(seed_distance(current, advance_seed(previous, 290), max_steps=20000), -10)
+
+    def test_classic_generation_methods_use_expected_call_gaps(self):
+        seed = 0x2031F790
+        method1 = generate_method(seed, "Method 1")
+        method2 = generate_method(seed, "Method 2")
+        method4 = generate_method(seed, "Method 4")
+        self.assertEqual(method1, generate_method1(seed))
+        self.assertNotEqual(method1.ivs, method2.ivs)
+        self.assertNotEqual(method2.ivs, method4.ivs)
+
+    def test_classic_method_search_and_recovery_round_trip(self):
+        seed = 0x2031F790
+        for method in ("Method 1", "Method 2", "Method 4"):
+            with self.subTest(method=method):
+                frame = generate_method(seed, method)
+                recovered = recover_pre_pid_seed(frame.pid, frame.ivs, method=method)
+                self.assertEqual(recovered, seed)
+                found = list(search_generation_method(
+                    seed, 0, SearchCriteria(pid=frame.pid), method=method, limit=1
+                ))
+                self.assertEqual(len(found), 1)
+                self.assertEqual(found[0].ivs, frame.ivs)
+
+    def test_generation_method_rejects_unknown_method(self):
+        with self.assertRaises(ValueError):
+            generate_method(0, "Method H-1")
 
     def test_recover_method1_pre_pid_seed(self):
         frame = generate_method1(0x2031F790)
