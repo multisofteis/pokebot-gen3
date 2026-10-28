@@ -296,12 +296,13 @@ def seed_was_passed(
     state = previous_seed_value & UINT32_MASK
     current_seed &= UINT32_MASK
     target_seed &= UINT32_MASK
+    target_seen = False
     for _ in range(max_steps):
         state = next_seed(state)
-        if state == target_seed:
-            return True
         if state == current_seed:
-            return False
+            return target_seen
+        if state == target_seed:
+            target_seen = True
     return None
 
 
