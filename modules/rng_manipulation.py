@@ -278,6 +278,33 @@ def recover_method1_pre_pid_seed(
     return matches[0] if matches else None
 
 
+def seed_was_passed(
+    previous_seed_value: int,
+    current_seed: int,
+    target_seed: int,
+    max_steps: int = 256,
+) -> bool | None:
+    """Check whether target_seed was skipped between two observed RNG states.
+
+    Returns True if the target appears before current_seed in the forward LCRNG
+    sequence, False if current_seed is reached first, or None if the observed
+    state transition exceeds max_steps. This makes per-frame trigger monitoring
+    proportional to RNG calls since the previous poll rather than a fixed 20k scan.
+    """
+    if max_steps < 1:
+        return None
+    state = previous_seed_value & UINT32_MASK
+    current_seed &= UINT32_MASK
+    target_seed &= UINT32_MASK
+    for _ in range(max_steps):
+        state = next_seed(state)
+        if state == target_seed:
+            return True
+        if state == current_seed:
+            return False
+    return None
+
+
 def seed_distance(start_seed: int, target_seed: int, max_steps: int = 20000) -> int | None:
     """Return signed LCRNG calls from start_seed to target_seed, within max_steps."""
     state = start_seed & UINT32_MASK
