@@ -209,6 +209,135 @@ def search_method1(
         state = next_seed(state)
 
 
+
+# The classic Gen III PID/IV methods differ in how many RNG calls occur
+# between PID generation and IV generation. Seeds passed to these helpers are
+# always the state immediately before the first PID call.
+GENERATION_METHOD_EXTRA_CALLS = {
+    "Method 1": 0,
+    "Method 2": 1,
+    "Method 4": 2,
+}
+
+
+def generate_method(
+    seed: int,
+    method: str = "Method 1",
+    advance: int = 0,
+    tid: int = 0,
+    sid: int = 0,
+) -> Method1Frame:
+    """Generate PID/IVs for a supported classic Gen III RNG method.
+
+    Method 2 and Method 4 consume one or two additional RNG calls after the
+    PID words and before the two IV words. This models the classic method
+    family only; it does not claim to model Method H, eggs, roamer quirks, or
+    encounter-specific scripts.
+    """
+    if method not in GENERATION_METHOD_EXTRA_CALLS:
+        raise ValueError(
+            f"Unsupported generation method {method!r}; choose one of "
+            f"{', '.join(GENERATION_METHOD_EXTRA_CALLS)}"
+        )
+    extra_calls = GENERATION_METHOD_EXTRA_CALLS[method]
+    state, pid_low = _next_u16(seed)
+    state, pid_high = _next_u16(state)
+    for _ in range(extra_calls):
+        state = next_seed(state)
+    state, iv_word_1 = _next_u16(state)
+    state, iv_word_2 = _next_u16(state)
+
+    pid = (pid_high << 16) | pid_low
+    ivs = (
+        iv_word_1 & 31,
+        (iv_word_1 >> 5) & 31,
+        (iv_word_1 >> 10) & 31,
+        iv_word_2 & 31,
+        (iv_word_2 >> 5) & 31,
+        (iv_word_2 >> 10) & 31,
+    )
+    shiny_xor = (pid >> 16) ^ (pid & 0xFFFF) ^ tid ^ sid
+    return Method1Frame(
+        seed=seed & UINT32_MASK,
+        advance=advance,
+        pid=pid,
+        nature=NATURES[pid % 25],
+        ivs=ivs,
+        shiny_xor=shiny_xor,
+    )
+
+
+def search_generation_method(
+    seed: int,
+    max_advances: int,
+    criteria: SearchCriteria = SearchCriteria(),
+    *,
+    method: str = "Method 1",
+    start_advance: int = 0,
+    limit: int | None = 100,
+    tid: int = 0,
+    sid: int = 0,
+) -> Iterator[Method1Frame]:
+    """Search a supported classic Gen III method from a known RNG state."""
+    if method not in GENERATION_METHOD_EXTRA_CALLS:
+        raise ValueError(
+            f"Unsupported generation method {method!r}; choose one of "
+            f"{', '.join(GENERATION_METHOD_EXTRA_CALLS)}"
+        )
+    if start_advance < 0 or max_advances < start_advance:
+        raise ValueError("Expected 0 <= start_advance <= max_advances")
+    if limit is not None and limit < 1:
+        raise ValueError("limit must be positive or None")
+    if not 0 <= tid <= 0xFFFF or not 0 <= sid <= 0xFFFF:
+        raise ValueError("TID and SID must be 16-bit unsigned integers")
+    if criteria.tid is not None:
+        tid, sid = criteria.tid, criteria.sid
+
+    state = advance_seed(seed & UINT32_MASK, start_advance)
+    found = 0
+    for advance in range(start_advance, max_advances + 1):
+        frame = generate_method(state, method, advance, tid, sid)
+        if _matches(frame, criteria):
+            yield frame
+            found += 1
+            if limit is not None and found >= limit:
+                return
+        state = next_seed(state)
+
+
+def recover_pre_pid_seed(
+    pid: int,
+    ivs: tuple[int, int, int, int, int, int] | None = None,
+    *,
+    method: str = "Method 1",
+) -> int | None:
+    """Recover a pre-PID seed for a supported classic Gen III method.
+
+    Recovery is only accepted when the PID has a unique compatible state;
+    providing IVs also validates the method-specific IV outputs.
+    """
+    if method not in GENERATION_METHOD_EXTRA_CALLS:
+        raise ValueError(
+            f"Unsupported generation method {method!r}; choose one of "
+            f"{', '.join(GENERATION_METHOD_EXTRA_CALLS)}"
+        )
+    pid_high = (pid >> 16) & 0xFFFF
+    pid_low = pid & 0xFFFF
+    matches: list[int] = []
+    for lower in range(0x10000):
+        first_state = (pid_low << 16) | lower
+        if (next_seed(first_state) >> 16) != pid_high:
+            continue
+        pre_pid_seed = previous_seed(first_state)
+        if ivs is not None:
+            frame = generate_method(pre_pid_seed, method)
+            if frame.pid != pid or frame.ivs != ivs:
+                continue
+        matches.append(pre_pid_seed)
+        if len(matches) > 1:
+            return None
+    return matches[0] if matches else None
+
 def read_live_rng_seed() -> int:
     """Read the current game's gRngValue state."""
     return unpack_uint32(read_symbol("gRngValue"))
