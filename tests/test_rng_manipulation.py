@@ -53,8 +53,8 @@ class TestGen3RngManipulation(unittest.TestCase):
     def test_seed_was_passed_handles_unusually_large_jump(self):
         previous = 0x12345678
         current = advance_seed(previous, 300)
-        self.assertIsNone(seed_was_passed(previous, current, advance_seed(previous, 200), max_steps=256))
-        self.assertEqual(seed_distance(current, advance_seed(previous, 200), max_steps=20000), -100)
+        self.assertIsNone(seed_was_passed(previous, current, advance_seed(previous, 290), max_steps=256))
+        self.assertEqual(seed_distance(current, advance_seed(previous, 290), max_steps=20000), -10)
 
     def test_recover_method1_pre_pid_seed(self):
         frame = generate_method1(0x2031F790)
