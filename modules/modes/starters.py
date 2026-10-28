@@ -15,6 +15,7 @@ from modules.rng_manipulation import (
     recover_method1_pre_pid_seed,
     search_method1,
     seed_distance,
+    seed_was_passed,
 )
 from modules.gui.rng_target_window import ask_for_starter_rng_target
 from modules.pokemon import get_species_by_name
@@ -124,6 +125,7 @@ def run_frlg() -> Generator:
             # several RNG calls per frame. Never use context.frame as an RNG
             # deadline. Track the actual seed sequence and re-plan only if the
             # trigger state has already passed (for example, multiple calls/frame).
+            previous_live_seed = read_live_rng_seed()
             while context.bot_mode != "Manual":
                 live_seed = read_live_rng_seed()
                 if live_seed == trigger_seed:
@@ -132,12 +134,25 @@ def run_frlg() -> Generator:
                     triggered = True
                     break
 
-                distance_to_trigger = seed_distance(
-                    live_seed, trigger_seed, max_steps=20000
-                )
-                if distance_to_trigger is not None and distance_to_trigger < 0:
-                    # We have passed the exact trigger state; re-search from now.
-                    break
+                # Most frames advance the RNG only a handful of times. Detect a
+                # missed trigger by walking only the states since the last poll,
+                # rather than doing a 20,000-step bidirectional search every frame.
+                if live_seed != previous_live_seed:
+                    passed = seed_was_passed(
+                        previous_live_seed, live_seed, trigger_seed, max_steps=256
+                    )
+                    if passed is True:
+                        # The game advanced past the trigger between polls.
+                        break
+                    if passed is None:
+                        # Rare discontinuity (e.g. a reset or an unusually large
+                        # jump): retain the conservative legacy fallback.
+                        distance_to_trigger = seed_distance(
+                            live_seed, trigger_seed, max_steps=20000
+                        )
+                        if distance_to_trigger is not None and distance_to_trigger < 0:
+                            break
+                    previous_live_seed = live_seed
                 yield
 
         if context.bot_mode == "Manual":
