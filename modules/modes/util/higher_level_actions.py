@@ -5,6 +5,7 @@ from typing import Generator, Union, Callable
 from modules.context import context
 from modules.rng_manipulation import (
     SearchCriteria,
+    advance_seed,
     read_live_rng_seed,
     search_generation_method,
     seed_distance,
@@ -223,12 +224,13 @@ def spin_to_rng_target(
     counter_clockwise: bool = False,
     stop_condition: Callable[[], bool] | None = None,
     max_replans: int | None = 1000,
+    trigger_offset: int = 0,
 ) -> Generator:
     """Search and spin toward a matching frame, recalculating if a target is skipped.
 
-    Returns the frame only after the live RNG is observed at its pre-generation
-    seed. The caller must trigger the encounter immediately; any intervening RNG
-    calls invalidate the target. ``max_replans=None`` retries until stopped.
+    trigger_offset is the calibrated signed RNG-call offset from the repeatable
+    trigger point to the Pokémon's pre-PID seed. The helper targets the matching
+    trigger state but returns the generated frame. Trigger immediately on return.
     """
     if max_advances < 0:
         raise ValueError("max_advances must be non-negative")
@@ -242,9 +244,11 @@ def spin_to_rng_target(
         if criteria.shiny is not None and criteria.tid is None:
             effective_criteria = replace(criteria, tid=tid, sid=sid)
 
+        # Search from the generation state corresponding to this trigger state.
+        generation_search_seed = advance_seed(live_seed, trigger_offset)
         target = next(
             search_generation_method(
-                live_seed,
+                generation_search_seed,
                 max_advances,
                 effective_criteria,
                 method=method,
@@ -258,12 +262,13 @@ def spin_to_rng_target(
             context.message = f"No {method} RNG target matched within {max_advances:,} calls."
             return None
 
+        trigger_seed = advance_seed(target.seed, -trigger_offset)
         context.message = (
-            f"Spinning toward {method} target 0x{target.seed:08X} "
-            f"({target.advance:,} RNG calls ahead)."
+            f"Spinning toward {method} trigger state 0x{trigger_seed:08X} "
+            f"({target.advance:,} RNG calls ahead; calibrated offset {trigger_offset:+d})."
         )
         reached = yield from spin(
-            target_seed=target.seed,
+            target_seed=trigger_seed,
             counter_clockwise=counter_clockwise,
             stop_condition=stop_condition,
         )
