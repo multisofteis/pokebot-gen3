@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Generator, Union, Callable
 
 from modules.context import context
+from modules.rng_manipulation import read_live_rng_seed, seed_distance, seed_was_passed
 from modules.debug import debug
 from modules.map_data import PokemonCenter
 from modules.memory import get_event_flag, get_game_state_symbol, unpack_uint32, read_symbol, get_game_state, GameState
@@ -151,8 +152,22 @@ def fish(stop_condition: Callable[[], bool] | None = None, loop: bool = False) -
 
 
 @debug.track
-def spin(stop_condition: Callable[[], bool] | None = None, counter_clockwise: bool = False):
+def spin(
+    stop_condition: Callable[[], bool] | None = None,
+    counter_clockwise: bool = False,
+    target_seed: int | None = None,
+):
+    """Rotate the player, optionally stopping when the live RNG reaches a target seed.
+
+    target_seed is the exact RNG state expected immediately before the target
+    generation calls. This only synchronizes the live RNG state; the caller must
+    trigger the encounter immediately after the generator returns. If polling
+    observes that the target was skipped, spinning stops rather than pretending
+    the target was reached.
+    """
     directions = ["Up", "Left", "Down", "Right"] if counter_clockwise else ["Up", "Right", "Down", "Left"]
+    previous_live_seed = read_live_rng_seed() if target_seed is not None else None
+
     while True:
         avatar = get_player_avatar()
         if (
@@ -160,6 +175,29 @@ def spin(stop_condition: Callable[[], bool] | None = None, counter_clockwise: bo
             and avatar.tile_transition_state == TileTransitionState.NOT_MOVING
             and avatar.running_state == RunningState.NOT_MOVING
         ):
+            if target_seed is not None:
+                live_seed = read_live_rng_seed()
+                if live_seed == (target_seed & 0xFFFFFFFF):
+                    context.message = f"Spin RNG target reached: 0x{live_seed:08X}. Trigger the encounter now."
+                    return
+
+                if previous_live_seed is not None and live_seed != previous_live_seed:
+                    passed = seed_was_passed(
+                        previous_live_seed, live_seed, target_seed, max_steps=256
+                    )
+                    if passed is None:
+                        # Unusually large RNG jumps are rare; only pay for the
+                        # wider scan when the normal bounded check cannot decide.
+                        distance = seed_distance(live_seed, target_seed, max_steps=20000)
+                        passed = distance is not None and distance < 0
+                    if passed:
+                        context.message = (
+                            f"Spin RNG target 0x{target_seed & 0xFFFFFFFF:08X} was passed "
+                            f"(current seed 0x{live_seed:08X}). Re-plan from the current seed."
+                        )
+                        return
+                    previous_live_seed = live_seed
+
             if stop_condition is not None and stop_condition():
                 return
 
