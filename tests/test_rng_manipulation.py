@@ -13,6 +13,7 @@ from modules.rng_manipulation import (
     recover_method1_pre_pid_seed,
     seed_was_passed,
     seed_distance,
+    calibrate_generation_offset,
 )
 
 
@@ -81,6 +82,25 @@ class TestGen3RngManipulation(unittest.TestCase):
                 self.assertEqual(len(found), 1)
                 self.assertEqual(found[0].ivs, frame.ivs)
 
+    def test_calibrate_generation_offset_from_trigger_state(self):
+        generated_seed = 0x2031F790
+        trigger_seed = advance_seed(generated_seed, -7)
+        for method in ("Method 1", "Method 2", "Method 4"):
+            with self.subTest(method=method):
+                frame = generate_method(generated_seed, method)
+                offset = calibrate_generation_offset(
+                    trigger_seed, frame.pid, frame.ivs, method=method
+                )
+                self.assertEqual(offset, 7)
+
+    def test_calibrate_generation_offset_rejects_out_of_range_distance(self):
+        frame = generate_method(0x2031F790, "Method 1")
+        trigger_seed = advance_seed(frame.seed, -7)
+        self.assertIsNone(
+            calibrate_generation_offset(
+                trigger_seed, frame.pid, frame.ivs, max_distance=3
+            )
+        )
     def test_generation_method_rejects_unknown_method(self):
         with self.assertRaises(ValueError):
             generate_method(0, "Method H-1")
