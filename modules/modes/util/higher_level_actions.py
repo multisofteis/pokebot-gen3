@@ -2,7 +2,14 @@ from enum import Enum
 from typing import Generator, Union, Callable
 
 from modules.context import context
-from modules.rng_manipulation import read_live_rng_seed, seed_distance, seed_was_passed
+from modules.rng_manipulation import (
+    Method1Frame,
+    SearchCriteria,
+    read_live_rng_seed,
+    search_generation_method,
+    seed_distance,
+    seed_was_passed,
+)
 from modules.debug import debug
 from modules.map_data import PokemonCenter
 from modules.memory import get_event_flag, get_game_state_symbol, unpack_uint32, read_symbol, get_game_state, GameState
@@ -179,7 +186,7 @@ def spin(
                 live_seed = read_live_rng_seed()
                 if live_seed == (target_seed & 0xFFFFFFFF):
                     context.message = f"Spin RNG target reached: 0x{live_seed:08X}. Trigger the encounter now."
-                    return
+                    return True
 
                 if previous_live_seed is not None and live_seed != previous_live_seed:
                     passed = seed_was_passed(
@@ -195,7 +202,7 @@ def spin(
                             f"Spin RNG target 0x{target_seed & 0xFFFFFFFF:08X} was passed "
                             f"(current seed 0x{live_seed:08X}). Re-plan from the current seed."
                         )
-                        return
+                        return False
                     previous_live_seed = live_seed
 
             if stop_condition is not None and stop_condition():
@@ -204,6 +211,52 @@ def spin(
             direction_index = (directions.index(avatar.facing_direction) + 1) % len(directions)
             context.emulator.press_button(directions[direction_index])
         yield
+
+
+def spin_to_rng_target(
+    criteria: SearchCriteria,
+    *,
+    max_advances: int = 1_000_000,
+    method: str = "Method 1",
+    tid: int = 0,
+    sid: int = 0,
+    counter_clockwise: bool = False,
+) -> Generator:
+    """Search from the live seed, spin to the first matching frame, and return it.
+
+    When this generator returns a Method1Frame, the live RNG was observed at the
+    frame's pre-generation seed. The caller must start the relevant encounter
+    immediately; any intervening RNG calls invalidate the target.
+    """
+    if max_advances < 0:
+        raise ValueError("max_advances must be non-negative")
+
+    live_seed = read_live_rng_seed()
+    target = next(
+        search_generation_method(
+            live_seed,
+            max_advances,
+            criteria,
+            method=method,
+            tid=tid,
+            sid=sid,
+            limit=1,
+        ),
+        None,
+    )
+    if target is None:
+        context.message = f"No {method} RNG target matched within {max_advances:,} calls."
+        return None
+
+    context.message = (
+        f"Spinning toward {method} target 0x{target.seed:08X} "
+        f"({target.advance:,} RNG calls ahead)."
+    )
+    reached = yield from spin(
+        target_seed=target.seed,
+        counter_clockwise=counter_clockwise,
+    )
+    return target if reached is True else None
 
 
 @debug.track
