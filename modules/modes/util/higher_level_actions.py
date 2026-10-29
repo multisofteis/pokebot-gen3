@@ -1,9 +1,9 @@
+from dataclasses import replace
 from enum import Enum
 from typing import Generator, Union, Callable
 
 from modules.context import context
 from modules.rng_manipulation import (
-    Method1Frame,
     SearchCriteria,
     read_live_rng_seed,
     search_generation_method,
@@ -232,11 +232,15 @@ def spin_to_rng_target(
         raise ValueError("max_advances must be non-negative")
 
     live_seed = read_live_rng_seed()
+    effective_criteria = criteria
+    if criteria.shiny is not None and criteria.tid is None:
+        effective_criteria = replace(criteria, tid=tid, sid=sid)
+
     target = next(
         search_generation_method(
             live_seed,
             max_advances,
-            criteria,
+            effective_criteria,
             method=method,
             tid=tid,
             sid=sid,
