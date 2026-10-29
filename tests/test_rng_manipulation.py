@@ -84,14 +84,15 @@ class TestGen3RngManipulation(unittest.TestCase):
 
     def test_calibrate_generation_offset_from_trigger_state(self):
         generated_seed = 0x2031F790
-        trigger_seed = advance_seed(generated_seed, -7)
         for method in ("Method 1", "Method 2", "Method 4"):
-            with self.subTest(method=method):
-                frame = generate_method(generated_seed, method)
-                offset = calibrate_generation_offset(
-                    trigger_seed, frame.pid, frame.ivs, method=method
-                )
-                self.assertEqual(offset, 7)
+            for expected_offset in (-7, 0, 7):
+                with self.subTest(method=method, offset=expected_offset):
+                    frame = generate_method(generated_seed, method)
+                    trigger_seed = advance_seed(generated_seed, -expected_offset)
+                    offset = calibrate_generation_offset(
+                        trigger_seed, frame.pid, frame.ivs, method=method
+                    )
+                    self.assertEqual(offset, expected_offset)
 
     def test_calibrate_generation_offset_rejects_out_of_range_distance(self):
         frame = generate_method(0x2031F790, "Method 1")
