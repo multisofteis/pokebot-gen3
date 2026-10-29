@@ -221,46 +221,63 @@ def spin_to_rng_target(
     tid: int = 0,
     sid: int = 0,
     counter_clockwise: bool = False,
+    stop_condition: Callable[[], bool] | None = None,
+    max_replans: int | None = 1000,
 ) -> Generator:
-    """Search from the live seed, spin to the first matching frame, and return it.
+    """Search and spin toward a matching frame, recalculating if a target is skipped.
 
-    When this generator returns a Method1Frame, the live RNG was observed at the
-    frame's pre-generation seed. The caller must start the relevant encounter
-    immediately; any intervening RNG calls invalidate the target.
+    Returns the frame only after the live RNG is observed at its pre-generation
+    seed. The caller must trigger the encounter immediately; any intervening RNG
+    calls invalidate the target. ``max_replans=None`` retries until stopped.
     """
     if max_advances < 0:
         raise ValueError("max_advances must be non-negative")
+    if max_replans is not None and max_replans < 1:
+        raise ValueError("max_replans must be positive or None")
 
-    live_seed = read_live_rng_seed()
-    effective_criteria = criteria
-    if criteria.shiny is not None and criteria.tid is None:
-        effective_criteria = replace(criteria, tid=tid, sid=sid)
+    replans = 0
+    while stop_condition is None or not stop_condition():
+        live_seed = read_live_rng_seed()
+        effective_criteria = criteria
+        if criteria.shiny is not None and criteria.tid is None:
+            effective_criteria = replace(criteria, tid=tid, sid=sid)
 
-    target = next(
-        search_generation_method(
-            live_seed,
-            max_advances,
-            effective_criteria,
-            method=method,
-            tid=tid,
-            sid=sid,
-            limit=1,
-        ),
-        None,
-    )
-    if target is None:
-        context.message = f"No {method} RNG target matched within {max_advances:,} calls."
-        return None
+        target = next(
+            search_generation_method(
+                live_seed,
+                max_advances,
+                effective_criteria,
+                method=method,
+                tid=tid,
+                sid=sid,
+                limit=1,
+            ),
+            None,
+        )
+        if target is None:
+            context.message = f"No {method} RNG target matched within {max_advances:,} calls."
+            return None
 
-    context.message = (
-        f"Spinning toward {method} target 0x{target.seed:08X} "
-        f"({target.advance:,} RNG calls ahead)."
-    )
-    reached = yield from spin(
-        target_seed=target.seed,
-        counter_clockwise=counter_clockwise,
-    )
-    return target if reached is True else None
+        context.message = (
+            f"Spinning toward {method} target 0x{target.seed:08X} "
+            f"({target.advance:,} RNG calls ahead)."
+        )
+        reached = yield from spin(
+            target_seed=target.seed,
+            counter_clockwise=counter_clockwise,
+            stop_condition=stop_condition,
+        )
+        if reached is True:
+            return target
+        if reached is None:
+            return None
+
+        replans += 1
+        if max_replans is not None and replans >= max_replans:
+            context.message = f"Spin RNG target was skipped {replans} times; stopping safely."
+            return None
+
+    return None
 
 
 @debug.track
