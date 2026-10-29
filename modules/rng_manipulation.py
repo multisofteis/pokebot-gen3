@@ -338,6 +338,33 @@ def recover_pre_pid_seed(
             return None
     return matches[0] if matches else None
 
+def calibrate_generation_offset(
+    trigger_seed: int,
+    pid: int,
+    ivs: tuple[int, int, int, int, int, int],
+    *,
+    method: str = "Method 1",
+    max_distance: int = 20000,
+) -> int | None:
+    """Measure RNG calls from an observed trigger state to a generated Pokémon.
+
+    ``trigger_seed`` must be sampled at a repeatable point in the encounter
+    trigger (for example, immediately before pressing the interaction button).
+    The return value is the signed number of LCRNG calls from that state to the
+    Pokémon's recovered pre-PID seed: positive means generation was ahead of the
+    sampled state, negative means it was behind it.
+
+    This is a calibration primitive, not an assumption that all encounter types
+    use the same offset. Repeat the measurement across several encounters and
+    only use the offset when the values agree.
+    """
+    if max_distance < 0:
+        raise ValueError("max_distance must be non-negative")
+    generated_seed = recover_pre_pid_seed(pid, ivs, method=method)
+    if generated_seed is None:
+        return None
+    return seed_distance(trigger_seed, generated_seed, max_steps=max_distance)
+
 def read_live_rng_seed() -> int:
     """Read the current game's gRngValue state."""
     return unpack_uint32(read_symbol("gRngValue"))
