@@ -235,7 +235,9 @@ def spin_to_rng_target(
     trigger point to the Pokémon's pre-PID seed. When trigger_action is supplied,
     it is called synchronously on the exact trigger state before this generator
     returns, avoiding an extra caller-side scheduling gap. The callback must be
-    a non-yielding action (typically a button press).
+    a non-yielding action (typically a button press). Returning a generator or
+    awaitable is rejected with TypeError so an accidentally yielding callback
+    cannot silently defer the actual trigger until after the target state.
     """
     if max_advances < 0:
         raise ValueError("max_advances must be non-negative")
