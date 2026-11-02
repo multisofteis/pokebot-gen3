@@ -1,4 +1,5 @@
 from dataclasses import replace
+import inspect
 from enum import Enum
 from typing import Generator, Union, Callable
 
@@ -278,7 +279,11 @@ def spin_to_rng_target(
         )
         if reached is True:
             if trigger_action is not None:
-                trigger_action()
+                action_result = trigger_action()
+                if inspect.isgenerator(action_result) or inspect.isawaitable(action_result):
+                    raise TypeError(
+                        "trigger_action must be synchronous and must not return a generator or awaitable"
+                    )
             return target
         if reached is None:
             return None
