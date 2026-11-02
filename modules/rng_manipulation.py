@@ -374,6 +374,34 @@ def calibrate_generation_offset(
         return None
     return seed_distance(trigger_seed, generated_seed, max_steps=max_distance)
 
+
+
+def calibrate_generation_offset_samples(
+    samples: list[tuple[int, int, tuple[int, int, int, int, int, int]]],
+    *,
+    method: str = "Method 1",
+    max_distance: int = 20000,
+) -> int | None:
+    """Return a trigger offset only when every calibration sample agrees.
+
+    Each sample is a (trigger_seed, pid, ivs) tuple captured at the same
+    repeatable point immediately before the encounter-trigger action. A
+    missing recovery, out-of-range distance, or disagreement rejects the
+    calibration rather than choosing an average that may target the wrong state.
+    """
+    if not samples:
+        return None
+    offsets = [
+        calibrate_generation_offset(
+            trigger_seed, pid, ivs, method=method, max_distance=max_distance
+        )
+        for trigger_seed, pid, ivs in samples
+    ]
+    if any(offset is None for offset in offsets):
+        return None
+    first_offset = offsets[0]
+    return first_offset if all(offset == first_offset for offset in offsets) else None
+
 def read_live_rng_seed() -> int:
     """Read the current game's gRngValue state."""
     return unpack_uint32(read_symbol("gRngValue"))
