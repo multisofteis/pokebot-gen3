@@ -42,7 +42,7 @@ class TestSpinToRngTargetTriggerAction(unittest.TestCase):
     def test_replanning_after_skipped_target_still_triggers_only_once(self):
         seeds = [0, advance_seed(0, 1)]
         outcomes = [False, True]
-        callback = unittest.mock.Mock()
+        callback = Mock()
 
         def spin_with_outcomes(**kwargs):
             yield
@@ -85,6 +85,22 @@ class TestSpinToRngTargetTriggerAction(unittest.TestCase):
             self.assertEqual(list(routine), [None])
 
         callback.assert_not_called()
+
+    def test_rejects_and_closes_coroutine_callback(self):
+        async def async_callback():
+            return None
+
+        with patch.object(higher_level_actions, "read_live_rng_seed", return_value=0), patch.object(
+            higher_level_actions, "spin", side_effect=self._successful_spin
+        ):
+            routine = higher_level_actions.spin_to_rng_target(
+                SearchCriteria(),
+                max_advances=0,
+                trigger_action=async_callback,
+            )
+            next(routine)
+            with self.assertRaises(TypeError):
+                next(routine)
 
     def test_rejects_generator_callback(self):
         def yielding_callback():
