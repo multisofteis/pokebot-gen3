@@ -363,6 +363,9 @@ def fish_to_rng_target(
         required_facing_direction=initial_facing,
     )
     if target is not None:
+        # Let the Select edge reach the game and create Task_Fishing before
+        # the fishing state machine starts polling for it.
+        yield
         yield from fish(loop=True)
     return target
 
