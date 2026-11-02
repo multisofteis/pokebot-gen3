@@ -76,7 +76,7 @@ class TestGen3RngManipulation(unittest.TestCase):
         mismatching_seed = None
         for seed in range(100):
             frame = generate_method(seed, "FRLG Fishing")
-            nature_roll = (previous_seed(seed) >> 16) % 25
+            nature_roll = (seed >> 16) % 25
             if nature_roll == frame.pid % 25 and matching_seed is None:
                 matching_seed = seed
             elif nature_roll != frame.pid % 25 and mismatching_seed is None:
