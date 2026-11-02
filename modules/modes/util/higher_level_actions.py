@@ -226,12 +226,15 @@ def spin_to_rng_target(
     stop_condition: Callable[[], bool] | None = None,
     max_replans: int | None = 1000,
     trigger_offset: int = 0,
+    trigger_action: Callable[[], None] | None = None,
 ) -> Generator:
     """Search and spin toward a matching frame, recalculating if a target is skipped.
 
     trigger_offset is the calibrated signed RNG-call offset from the repeatable
-    trigger point to the Pokémon's pre-PID seed. The helper targets the matching
-    trigger state but returns the generated frame. Trigger immediately on return.
+    trigger point to the Pokémon's pre-PID seed. When trigger_action is supplied,
+    it is called synchronously on the exact trigger state before this generator
+    returns, avoiding an extra caller-side scheduling gap. The callback must be
+    a non-yielding action (typically a button press).
     """
     if max_advances < 0:
         raise ValueError("max_advances must be non-negative")
@@ -274,6 +277,8 @@ def spin_to_rng_target(
             stop_condition=stop_condition,
         )
         if reached is True:
+            if trigger_action is not None:
+                trigger_action()
             return target
         if reached is None:
             return None
