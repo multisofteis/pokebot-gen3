@@ -217,6 +217,10 @@ GENERATION_METHOD_EXTRA_CALLS = {
     "Method 1": 0,
     "Method 2": 1,
     "Method 4": 2,
+    # FRLG fishing uses the Method 1 PID/IV layout, but the game first
+    # consumes two calls for rod slot/level and one call to choose a nature.
+    # CreateMonWithNature then rerolls PID pairs until PID % 25 matches it.
+    "FRLG Fishing": 0,
 }
 
 
@@ -267,6 +271,14 @@ def generate_method(
     )
 
 
+def _matches_frlg_fishing_nature(seed: int, frame: Method1Frame) -> bool:
+    # The nature roll is the Random() call immediately before the accepted
+    # PID pair. Earlier rejected PID pairs do not affect this relationship.
+    nature_roll_seed = previous_seed(seed)
+    nature_roll = nature_roll_seed >> 16
+    return nature_roll % len(NATURES) == frame.pid % len(NATURES)
+
+
 def search_generation_method(
     seed: int,
     max_advances: int,
@@ -297,7 +309,10 @@ def search_generation_method(
     found = 0
     for advance in range(start_advance, max_advances + 1):
         frame = generate_method(state, method, advance, tid, sid)
-        if _matches(frame, criteria):
+        method_matches = (
+            method != "FRLG Fishing" or _matches_frlg_fishing_nature(state, frame)
+        )
+        if method_matches and _matches(frame, criteria):
             yield frame
             found += 1
             if limit is not None and found >= limit:
