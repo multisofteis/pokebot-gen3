@@ -161,13 +161,12 @@ def fish(stop_condition: Callable[[], bool] | None = None, loop: bool = False) -
 
         if not loop or task_state != previous_task_state:
             if task_fishing is not None:
-                match task_state:
-                    case TaskFishing.WAIT_FOR_A.value | TaskFishing.END_NO_MON.value:
-                        context.emulator.press_button("A")
-                    case TaskFishing.NOT_EVEN_NIBBLE.value:
-                        context.emulator.press_button("B")
-                    case TaskFishing.START_ENCOUNTER.value:
-                        context.emulator.press_button("A")
+                # The encounter is started automatically by the game's fishing
+                # task after its "Pokemon on the hook" text finishes. The
+                # no-bite and cleanup states also advance without input.
+                # Only the explicit wait-for-A state accepts a reel-in press.
+                if task_state == TaskFishing.WAIT_FOR_A.value:
+                    context.emulator.press_button("A")
             elif not loop or previous_task_state is not None:
                 context.emulator.press_button("Select")
 
