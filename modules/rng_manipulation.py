@@ -338,6 +338,15 @@ def recover_pre_pid_seed(
             return None
     return matches[0] if matches else None
 
+def trigger_seed_for_frame(generation_seed: int, trigger_offset: int) -> int:
+    """Translate a pre-PID generation seed to its repeatable trigger-point seed.
+
+    ``trigger_offset`` is the signed number of LCRNG calls from the trigger
+    sample to the pre-PID seed, as returned by :func:`calibrate_generation_offset`.
+    """
+    return advance_seed(generation_seed, -trigger_offset)
+
+
 def calibrate_generation_offset(
     trigger_seed: int,
     pid: int,
