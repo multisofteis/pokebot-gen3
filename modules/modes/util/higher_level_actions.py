@@ -138,23 +138,40 @@ class TaskFishing(Enum):
 
 @debug.track
 def fish(stop_condition: Callable[[], bool] | None = None, loop: bool = False) -> Generator:
-    """Handles both single fishing actions or continuous fishing loop."""
+    """Handle fishing with state-aware, edge-triggered button inputs.
+
+    In continuous mode, each fishing task state is acted on once when it first
+    appears. The original implementation held the same logical action by
+    issuing a fresh button press every frame while a task state remained
+    active. Fishing prompts are discrete input events, so repeating them can
+    turn a normal human response into button spam and can obscure timing bugs.
+
+    Single-step mode intentionally retains its one-frame behavior: callers
+    that manage the fishing task themselves can continue to advance it one
+    action at a time.
+    """
+    previous_task_state = object()
 
     while True:
         if stop_condition is not None and stop_condition():
             return
 
         task_fishing = get_task("Task_Fishing")
-        if task_fishing is not None:
-            match task_fishing.data[0]:
-                case TaskFishing.WAIT_FOR_A.value | TaskFishing.END_NO_MON.value:
-                    context.emulator.press_button("A")
-                case TaskFishing.NOT_EVEN_NIBBLE.value:
-                    context.emulator.press_button("B")
-                case TaskFishing.START_ENCOUNTER.value:
-                    context.emulator.press_button("A")
-        else:
-            context.emulator.press_button("Select")
+        task_state = task_fishing.data[0] if task_fishing is not None else None
+
+        if not loop or task_state != previous_task_state:
+            if task_fishing is not None:
+                match task_state:
+                    case TaskFishing.WAIT_FOR_A.value | TaskFishing.END_NO_MON.value:
+                        context.emulator.press_button("A")
+                    case TaskFishing.NOT_EVEN_NIBBLE.value:
+                        context.emulator.press_button("B")
+                    case TaskFishing.START_ENCOUNTER.value:
+                        context.emulator.press_button("A")
+            elif not loop or previous_task_state is not None:
+                context.emulator.press_button("Select")
+
+        previous_task_state = task_state
         yield
 
         if not loop:
