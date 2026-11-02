@@ -183,6 +183,7 @@ def spin(
     stop_condition: Callable[[], bool] | None = None,
     counter_clockwise: bool = False,
     target_seed: int | None = None,
+    required_facing_direction: str | None = None,
 ):
     """Rotate the player, optionally stopping when the live RNG reaches a target seed.
 
@@ -205,8 +206,9 @@ def spin(
             if target_seed is not None:
                 live_seed = read_live_rng_seed()
                 if live_seed == (target_seed & 0xFFFFFFFF):
-                    context.message = f"Spin RNG target reached: 0x{live_seed:08X}. Trigger the encounter now."
-                    return True
+                    if required_facing_direction is None or avatar.facing_direction == required_facing_direction:
+                        context.message = f"Spin RNG target reached: 0x{live_seed:08X}. Trigger the encounter now."
+                        return True
 
                 if previous_live_seed is not None and live_seed != previous_live_seed:
                     passed = seed_was_passed(
@@ -245,6 +247,7 @@ def spin_to_rng_target(
     max_replans: int | None = 1000,
     trigger_offset: int = 0,
     trigger_action: Callable[[], None] | None = None,
+    required_facing_direction: str | None = None,
 ) -> Generator:
     """Search and spin toward a matching frame, recalculating if a target is skipped.
 
@@ -295,6 +298,7 @@ def spin_to_rng_target(
             target_seed=trigger_seed,
             counter_clockwise=counter_clockwise,
             stop_condition=stop_condition,
+            required_facing_direction=required_facing_direction,
         )
         if reached is True:
             if trigger_action is not None:
@@ -317,6 +321,50 @@ def spin_to_rng_target(
             return None
 
     return None
+
+
+@debug.track
+def fish_to_rng_target(
+    criteria: SearchCriteria,
+    *,
+    trigger_offset: int,
+    max_advances: int = 1_000_000,
+    tid: int = 0,
+    sid: int = 0,
+    counter_clockwise: bool = False,
+    stop_condition: Callable[[], bool] | None = None,
+    max_replans: int | None = 1000,
+) -> Generator:
+    """Fish for a searched FRLG frame using ordinary controls only.
+
+    The caller must register a fishing rod before starting this generator.
+    trigger_offset is the calibrated number of LCRNG calls from the live seed
+    sampled immediately before pressing Select to the Pokémon's pre-PID seed.
+    The player is returned to their original facing direction before Select is
+    pressed, so the rod remains aimed at the same water tile.
+    """
+    if not context.rom.is_frlg:
+        raise BotModeError("Targeted fishing is currently supported only in FireRed/LeafGreen.")
+    if trigger_offset is None:
+        raise ValueError("A calibrated fishing trigger_offset is required")
+
+    initial_facing = get_player_avatar().facing_direction
+    target = yield from spin_to_rng_target(
+        criteria,
+        max_advances=max_advances,
+        method="FRLG Fishing",
+        tid=tid,
+        sid=sid,
+        counter_clockwise=counter_clockwise,
+        stop_condition=stop_condition,
+        max_replans=max_replans,
+        trigger_offset=trigger_offset,
+        trigger_action=lambda: context.emulator.press_button("Select"),
+        required_facing_direction=initial_facing,
+    )
+    if target is not None:
+        yield from fish(loop=True)
+    return target
 
 
 @debug.track
