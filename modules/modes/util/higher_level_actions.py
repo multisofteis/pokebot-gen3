@@ -29,7 +29,7 @@ from modules.player import (
 )
 from modules.pokemon_party import get_party
 from modules.region_map import FlyDestinationFRLG, FlyDestinationRSE, get_map_cursor, get_map_region
-from modules.tasks import get_task, task_is_active
+from modules.tasks import get_task, is_waiting_for_input, task_is_active
 from ._util_helper import isolate_inputs
 from .items import scroll_to_item_in_bag, use_item_from_bag
 from .tasks_scripts import (
@@ -155,6 +155,7 @@ def fish(
     action at a time.
     """
     previous_task_state = object()
+    prompt_action_sent = False
 
     while True:
         if stop_condition is not None and get_game_state() is GameState.OVERWORLD and stop_condition():
@@ -169,19 +170,30 @@ def fish(
             yield
             continue
 
-        if not loop or task_state != previous_task_state:
-            if task_fishing is not None:
-                match task_state:
-                    case TaskFishing.WAIT_FOR_A.value | TaskFishing.END_NO_MON.value:
-                        context.emulator.press_button("A")
-                    case TaskFishing.NOT_EVEN_NIBBLE.value:
-                        context.emulator.press_button("B")
-                    case TaskFishing.START_ENCOUNTER.value:
-                        context.emulator.press_button("A")
-            elif not loop or previous_task_state is not None:
-                if before_cast is not None:
-                    before_cast()
-                context.emulator.press_button("Select")
+        if task_state != previous_task_state:
+            prompt_action_sent = False
+
+        if task_fishing is not None:
+            # Task state changes can precede the textbox becoming input-ready.
+            # Wait for the actual input gate, then send one edge-triggered press.
+            prompt_states = (
+                TaskFishing.WAIT_FOR_A.value,
+                TaskFishing.NOT_EVEN_NIBBLE.value,
+                TaskFishing.START_ENCOUNTER.value,
+                TaskFishing.END_NO_MON.value,
+            )
+            if (
+                task_state in prompt_states
+                and is_waiting_for_input()
+                and not prompt_action_sent
+            ):
+                button = "B" if task_state == TaskFishing.NOT_EVEN_NIBBLE.value else "A"
+                context.emulator.press_button(button)
+                prompt_action_sent = True
+        elif not loop or previous_task_state is not None:
+            if before_cast is not None:
+                before_cast()
+            context.emulator.press_button("Select")
 
         previous_task_state = task_state
         yield
