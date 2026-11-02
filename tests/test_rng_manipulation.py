@@ -14,6 +14,7 @@ from modules.rng_manipulation import (
     seed_was_passed,
     seed_distance,
     calibrate_generation_offset,
+    calibrate_generation_offset_samples,
     trigger_seed_for_frame,
 )
 
@@ -101,6 +102,21 @@ class TestGen3RngManipulation(unittest.TestCase):
             with self.subTest(offset=offset):
                 trigger_seed = trigger_seed_for_frame(generation_seed, offset)
                 self.assertEqual(advance_seed(trigger_seed, offset), generation_seed)
+
+    def test_calibration_samples_require_consistent_offsets(self):
+        generation_seed = 0x2031F790
+        frame = generate_method(generation_seed, "Method 1")
+        consistent = [
+            (advance_seed(generation_seed, -7), frame.pid, frame.ivs),
+            (advance_seed(generation_seed, -7), frame.pid, frame.ivs),
+            (advance_seed(generation_seed, -7), frame.pid, frame.ivs),
+        ]
+        self.assertEqual(calibrate_generation_offset_samples(consistent), 7)
+        inconsistent = consistent[:2] + [
+            (advance_seed(generation_seed, -8), frame.pid, frame.ivs)
+        ]
+        self.assertIsNone(calibrate_generation_offset_samples(inconsistent))
+        self.assertIsNone(calibrate_generation_offset_samples([]))
 
     def test_calibrate_generation_offset_rejects_out_of_range_distance(self):
         frame = generate_method(0x2031F790, "Method 1")
