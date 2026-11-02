@@ -71,6 +71,30 @@ class TestGen3RngManipulation(unittest.TestCase):
         self.assertNotEqual(method1.ivs, method2.ivs)
         self.assertNotEqual(method2.ivs, method4.ivs)
 
+    def test_frlg_fishing_requires_the_preceding_nature_roll_to_match_pid(self):
+        matching_seed = None
+        mismatching_seed = None
+        for seed in range(100):
+            frame = generate_method(seed, "FRLG Fishing")
+            nature_roll = (previous_seed(seed) >> 16) % 25
+            if nature_roll == frame.pid % 25 and matching_seed is None:
+                matching_seed = seed
+            elif nature_roll != frame.pid % 25 and mismatching_seed is None:
+                mismatching_seed = seed
+            if matching_seed is not None and mismatching_seed is not None:
+                break
+
+        self.assertIsNotNone(matching_seed)
+        self.assertIsNotNone(mismatching_seed)
+        valid = list(search_generation_method(
+            matching_seed, 0, SearchCriteria(), method="FRLG Fishing", limit=1
+        ))
+        invalid = list(search_generation_method(
+            mismatching_seed, 0, SearchCriteria(), method="FRLG Fishing", limit=1
+        ))
+        self.assertEqual(len(valid), 1)
+        self.assertEqual(len(invalid), 0)
+
     def test_classic_method_search_and_recovery_round_trip(self):
         seed = 0x2031F790
         for method in ("Method 1", "Method 2", "Method 4"):
