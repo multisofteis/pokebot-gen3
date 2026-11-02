@@ -137,7 +137,11 @@ class TaskFishing(Enum):
 
 
 @debug.track
-def fish(stop_condition: Callable[[], bool] | None = None, loop: bool = False) -> Generator:
+def fish(
+    stop_condition: Callable[[], bool] | None = None,
+    loop: bool = False,
+    before_cast: Callable[[], None] | None = None,
+) -> Generator:
     """Handle fishing with state-aware, edge-triggered button inputs.
 
     In continuous mode, each fishing task state is acted on once when it first
@@ -159,6 +163,12 @@ def fish(stop_condition: Callable[[], bool] | None = None, loop: bool = False) -
         task_fishing = get_task("Task_Fishing")
         task_state = task_fishing.data[0] if task_fishing is not None else None
 
+        if task_fishing is None and get_game_state() is not GameState.OVERWORLD:
+            # Do not issue another rod input while a fishing encounter is in battle.
+            # Preserve the previous task state so fishing resumes after the battle.
+            yield
+            continue
+
         if not loop or task_state != previous_task_state:
             if task_fishing is not None:
                 match task_state:
@@ -169,6 +179,8 @@ def fish(stop_condition: Callable[[], bool] | None = None, loop: bool = False) -
                     case TaskFishing.START_ENCOUNTER.value:
                         context.emulator.press_button("A")
             elif not loop or previous_task_state is not None:
+                if before_cast is not None:
+                    before_cast()
                 context.emulator.press_button("Select")
 
         previous_task_state = task_state
