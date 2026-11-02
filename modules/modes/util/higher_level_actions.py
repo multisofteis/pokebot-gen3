@@ -207,6 +207,7 @@ def spin(
     """
     directions = ["Up", "Left", "Down", "Right"] if counter_clockwise else ["Up", "Right", "Down", "Left"]
     previous_live_seed = read_live_rng_seed() if target_seed is not None else None
+    target_waiting_for_facing = False
 
     while True:
         avatar = get_player_avatar()
@@ -221,8 +222,10 @@ def spin(
                     if required_facing_direction is None or avatar.facing_direction == required_facing_direction:
                         context.message = f"Spin RNG target reached: 0x{live_seed:08X}. Trigger the encounter now."
                         return True
+                    target_waiting_for_facing = True
+                elif target_waiting_for_facing:
                     context.message = (
-                        f"Spin RNG target 0x{live_seed:08X} reached with the wrong facing direction; replanning."
+                        f"Spin RNG target 0x{target_seed & 0xFFFFFFFF:08X} advanced before the player faced the water; replanning."
                     )
                     return False
 
