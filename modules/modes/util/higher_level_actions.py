@@ -157,7 +157,7 @@ def fish(
     previous_task_state = object()
 
     while True:
-        if stop_condition is not None and stop_condition():
+        if stop_condition is not None and get_game_state() is GameState.OVERWORLD and stop_condition():
             return
 
         task_fishing = get_task("Task_Fishing")
