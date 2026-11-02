@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from modules.modes.util import higher_level_actions
 from modules.rng_manipulation import SearchCriteria, advance_seed
@@ -30,7 +30,7 @@ class TestSpinToRngTargetTriggerAction(unittest.TestCase):
         self.assertEqual(events, ["trigger"])
 
     def test_trigger_action_is_not_called_when_stopped_before_search(self):
-        callback = unittest.mock.Mock()
+        callback = Mock()
         routine = higher_level_actions.spin_to_rng_target(
             SearchCriteria(),
             stop_condition=lambda: True,
@@ -63,6 +63,28 @@ class TestSpinToRngTargetTriggerAction(unittest.TestCase):
 
         self.assertEqual(result, [None, None])
         callback.assert_called_once_with()
+
+
+    def test_trigger_action_is_not_called_when_spin_aborts(self):
+        callback = Mock()
+
+        def aborted_spin(**kwargs):
+            yield
+            return None
+
+        with patch.object(
+            higher_level_actions, "read_live_rng_seed", return_value=0
+        ), patch.object(
+            higher_level_actions, "spin", side_effect=aborted_spin
+        ):
+            routine = higher_level_actions.spin_to_rng_target(
+                SearchCriteria(),
+                max_advances=0,
+                trigger_action=callback,
+            )
+            self.assertEqual(list(routine), [None])
+
+        callback.assert_not_called()
 
     def test_rejects_generator_callback(self):
         def yielding_callback():
