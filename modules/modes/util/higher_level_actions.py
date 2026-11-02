@@ -174,26 +174,15 @@ def fish(
             prompt_action_sent = False
 
         if task_fishing is not None:
-            # Task state changes can precede the textbox becoming input-ready.
-            # Wait for the actual input gate, then send one edge-triggered press.
-            prompt_states = (
-                TaskFishing.WAIT_FOR_A.value,
-                TaskFishing.NOT_EVEN_NIBBLE.value,
-                TaskFishing.START_ENCOUNTER.value,
-                TaskFishing.END_NO_MON.value,
-            )
-            if (
-                task_state in prompt_states
-                and is_waiting_for_input()
-                and not prompt_action_sent
-            ):
-                button = "B" if task_state == TaskFishing.NOT_EVEN_NIBBLE.value else "A"
-                context.emulator.press_button(button)
+            # In FRLG's Task_Fishing state machine, WAIT_FOR_A is the only
+            # state that requires a player input: it waits for A_BUTTON after
+            # the bite animation. The no-bite / got-away / encounter text
+            # states advance automatically when their text printer finishes.
+            # Waiting for is_waiting_for_input() here is incorrect because
+            # WAIT_FOR_A is not a script textbox wait.
+            if task_state == TaskFishing.WAIT_FOR_A.value and not prompt_action_sent:
+                context.emulator.press_button("A")
                 prompt_action_sent = True
-        elif not loop or previous_task_state is not None:
-            if before_cast is not None:
-                before_cast()
-            context.emulator.press_button("Select")
 
         previous_task_state = task_state
         yield
