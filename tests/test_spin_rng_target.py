@@ -36,7 +36,7 @@ class TestSpinToRngTargetTriggerAction(unittest.TestCase):
             stop_condition=lambda: True,
             trigger_action=callback,
         )
-        self.assertIsNone(list(routine))
+        self.assertEqual(list(routine), [])
         callback.assert_not_called()
 
     def test_replanning_after_skipped_target_still_triggers_only_once(self):
@@ -61,7 +61,7 @@ class TestSpinToRngTargetTriggerAction(unittest.TestCase):
             )
             result = list(routine)
 
-        self.assertEqual(len(result), 0)
+        self.assertEqual(result, [None, None])
         callback.assert_called_once_with()
 
     def test_rejects_generator_callback(self):
