@@ -283,6 +283,10 @@ def spin_to_rng_target(
             if trigger_action is not None:
                 action_result = trigger_action()
                 if inspect.isgenerator(action_result) or inspect.isawaitable(action_result):
+                    # Close native coroutine objects before rejecting them so Python
+                    # does not emit an un-awaited-coroutine warning during cleanup.
+                    if inspect.iscoroutine(action_result):
+                        action_result.close()
                     raise TypeError(
                         "trigger_action must be synchronous and must not return a generator or awaitable"
                     )
