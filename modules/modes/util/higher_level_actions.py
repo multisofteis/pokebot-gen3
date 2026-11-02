@@ -125,17 +125,17 @@ class TaskFishing(Enum):
     SHOW_DOTS = 4
     CHECK_FOR_BITE = 5
     GOT_BITE = 6
-    # FireRed's Fishing7 advances from state 7 to state 10 immediately.
-    # The actual reel-in window is state 8 (Fishing8).
-    WAIT_FOR_A = 8
-    CHECK_MORE_DOTS = 9
-    MON_ON_HOOK = 10
-    START_ENCOUNTER = 11
-    NOT_EVEN_NIBBLE = 12
-    GOT_AWAY = 13
-    NO_MON = 14
-    PUT_ROD_AWAY = 15
-    END_NO_MON = 16
+    # These values are the Task_Fishing tStep indices in FireRed.
+    # Fishing8 (state 7) is the timed A-button reel-in window.
+    WAIT_FOR_A = 7
+    CHECK_MORE_DOTS = 8
+    MON_ON_HOOK = 9
+    START_ENCOUNTER = 10
+    NOT_EVEN_NIBBLE = 11
+    GOT_AWAY = 12
+    NO_MON = 13
+    PUT_ROD_AWAY = 14
+    END_NO_MON = 15
 
 
 @debug.track
@@ -160,11 +160,11 @@ def fish(
         if task_fishing is not None:
             cast_started = False
             task_state = task_fishing.data[0]
-            if task_state in (TaskFishing.WAIT_FOR_A.value, TaskFishing.START_ENCOUNTER.value,
-                              TaskFishing.END_NO_MON.value):
+            # Fishing8 checks gMain.newKeys & A_BUTTON for up to 30-36
+            # frames. Reissue A while this exact timed state is active so a
+            # missed one-frame press cannot consume the entire reel-in window.
+            if task_state == TaskFishing.WAIT_FOR_A.value:
                 context.emulator.press_button("A")
-            elif task_state == TaskFishing.NOT_EVEN_NIBBLE.value:
-                context.emulator.press_button("B")
         else:
             # Select is the registered-item shortcut for the fishing rod.
             # Keep retrying until the game creates Task_Fishing; an input can
