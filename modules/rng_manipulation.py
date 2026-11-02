@@ -274,8 +274,9 @@ def generate_method(
 def _matches_frlg_fishing_nature(seed: int, frame: Method1Frame) -> bool:
     # The nature roll is the Random() call immediately before the accepted
     # PID pair. Earlier rejected PID pairs do not affect this relationship.
-    nature_roll_seed = previous_seed(seed)
-    nature_roll = nature_roll_seed >> 16
+    # seed is the LCRNG state after the nature Random() call and
+    # immediately before the accepted PID pair.
+    nature_roll = seed >> 16
     return nature_roll % len(NATURES) == frame.pid % len(NATURES)
 
 
