@@ -10,6 +10,7 @@ from modules.rng_manipulation import (
     search_generation_method,
     seed_distance,
     seed_was_passed,
+    trigger_seed_for_frame,
 )
 from modules.debug import debug
 from modules.map_data import PokemonCenter
@@ -262,7 +263,7 @@ def spin_to_rng_target(
             context.message = f"No {method} RNG target matched within {max_advances:,} calls."
             return None
 
-        trigger_seed = advance_seed(target.seed, -trigger_offset)
+        trigger_seed = trigger_seed_for_frame(target.seed, trigger_offset)
         context.message = (
             f"Spinning toward {method} trigger state 0x{trigger_seed:08X} "
             f"({target.advance:,} RNG calls ahead; calibrated offset {trigger_offset:+d})."
