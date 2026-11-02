@@ -118,6 +118,22 @@ class TestGen3RngManipulation(unittest.TestCase):
         self.assertIsNone(calibrate_generation_offset_samples(inconsistent))
         self.assertIsNone(calibrate_generation_offset_samples([]))
 
+    def test_calibration_samples_validate_recovery_for_each_method(self):
+        generation_seed = 0x2031F790
+        for method in ("Method 1", "Method 2", "Method 4"):
+            with self.subTest(method=method):
+                frame = generate_method(generation_seed, method)
+                sample = (advance_seed(generation_seed, -11), frame.pid, frame.ivs)
+                self.assertEqual(
+                    calibrate_generation_offset_samples([sample, sample], method=method),
+                    11,
+                )
+                bad_ivs = (frame.ivs[0] ^ 1,) + frame.ivs[1:]
+                bad_sample = (sample[0], frame.pid, bad_ivs)
+                self.assertIsNone(
+                    calibrate_generation_offset_samples([sample, bad_sample], method=method)
+                )
+
     def test_calibrate_generation_offset_rejects_out_of_range_distance(self):
         frame = generate_method(0x2031F790, "Method 1")
         trigger_seed = advance_seed(frame.seed, -7)
