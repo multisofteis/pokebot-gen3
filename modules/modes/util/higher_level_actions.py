@@ -125,15 +125,17 @@ class TaskFishing(Enum):
     SHOW_DOTS = 4
     CHECK_FOR_BITE = 5
     GOT_BITE = 6
-    WAIT_FOR_A = 7
-    CHECK_MORE_DOTS = 8
-    MON_ON_HOOK = 9
-    START_ENCOUNTER = 10
-    NOT_EVEN_NIBBLE = 11
-    GOT_AWAY = 12
-    NO_MON = 13
-    PUT_ROD_AWAY = 14
-    END_NO_MON = 15
+    # FireRed's Fishing7 advances from state 7 to state 10 immediately.
+    # The actual reel-in window is state 8 (Fishing8).
+    WAIT_FOR_A = 8
+    CHECK_MORE_DOTS = 9
+    MON_ON_HOOK = 10
+    START_ENCOUNTER = 11
+    NOT_EVEN_NIBBLE = 12
+    GOT_AWAY = 13
+    NO_MON = 14
+    PUT_ROD_AWAY = 15
+    END_NO_MON = 16
 
 
 @debug.track
@@ -142,63 +144,38 @@ def fish(
     loop: bool = False,
     before_cast: Callable[[], None] | None = None,
 ) -> Generator:
-    """Handle fishing with state-aware, edge-triggered button inputs.
+    """Handle the FRLG fishing task using its actual per-frame input states.
 
-    In continuous mode, each fishing task state is acted on once when it first
-    appears. The original implementation held the same logical action by
-    issuing a fresh button press every frame while a task state remained
-    active. Fishing prompts are discrete input events, so repeating them can
-    turn a normal human response into button spam and can obscure timing bugs.
-
-    Single-step mode intentionally retains its one-frame behavior: callers
-    that manage the fishing task themselves can continue to advance it one
-    action at a time.
+    The fishing task's input windows are time-sensitive. Keep supplying the
+    expected input while a prompt is active, as the original bot loop did,
+    rather than sending a single edge-triggered press that can be missed.
     """
-    previous_task_state = object()
-    prompt_action_sent = False
-    cast_action_sent = False
+    cast_started = False
 
     while True:
         if stop_condition is not None and get_game_state() is GameState.OVERWORLD and stop_condition():
             return
 
         task_fishing = get_task("Task_Fishing")
-        task_state = task_fishing.data[0] if task_fishing is not None else None
-
-        if task_fishing is None:
-            if get_game_state() is not GameState.OVERWORLD:
-                # A battle or another game state is active; never cast into it.
-                yield
-                continue
-
-            # No fishing task means the rod must be cast. Send Select once,
-            # then wait for Task_Fishing to appear instead of spamming it.
-            if not cast_action_sent:
-                if before_cast is not None:
-                    before_cast()
+        if task_fishing is not None:
+            cast_started = False
+            task_state = task_fishing.data[0]
+            if task_state in (TaskFishing.WAIT_FOR_A.value, TaskFishing.START_ENCOUNTER.value,
+                              TaskFishing.END_NO_MON.value):
+                context.emulator.press_button("A")
+            elif task_state == TaskFishing.NOT_EVEN_NIBBLE.value:
+                context.emulator.press_button("B")
+        else:
+            # Select is the registered-item shortcut for the fishing rod.
+            # Keep retrying until the game creates Task_Fishing; an input can
+            # otherwise be lost between frames and leave fishing idle forever.
+            if get_game_state() is GameState.OVERWORLD:
+                if not cast_started:
+                    if before_cast is not None:
+                        before_cast()
+                    cast_started = True
                 context.emulator.press_button("Select")
-                cast_action_sent = True
 
-            previous_task_state = None
-            prompt_action_sent = False
-            yield
-            if not loop:
-                break
-            continue
-
-        # A task is now active, so the next task-free overworld period may cast.
-        cast_action_sent = False
-
-        if task_state != previous_task_state:
-            prompt_action_sent = False
-
-        # FRLG Fishing8 waits on gMain.newKeys & A_BUTTON. This is a fresh
-        # press edge, not a script/textbox input wait.
-        if task_state == TaskFishing.WAIT_FOR_A.value and not prompt_action_sent:
-            context.emulator.press_button("A")
-            prompt_action_sent = True
-
-        previous_task_state = task_state
         yield
         if not loop:
             break
