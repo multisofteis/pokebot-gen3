@@ -25,7 +25,11 @@ class FishingMode(BotMode):
         return targeted_tile is not None and targeted_tile.is_surfable
 
     def on_battle_ended(self, outcome: "BattleOutcome") -> None:
-        if context.rom.is_frlg and self._last_fishing_trigger_seed is not None:
+        if (
+            outcome is not BattleOutcome.Lost
+            and context.rom.is_frlg
+            and self._last_fishing_trigger_seed is not None
+        ):
             opponent_party = get_opponent_party()
             if opponent_party is not None and len(opponent_party) > 0:
                 pokemon = opponent_party[0]
@@ -93,7 +97,6 @@ class FishingMode(BotMode):
         if self._calibrated_fishing_trigger_offset is None:
             return
 
-        self._offered_fishing_rng_target = True
         if ask_for_confirmation(
             "Fishing RNG timing is calibrated. Would you like to configure a target Pokémon?",
             window_title="Fishing RNG Target",
