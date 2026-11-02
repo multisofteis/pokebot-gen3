@@ -221,6 +221,10 @@ def spin(
                     if required_facing_direction is None or avatar.facing_direction == required_facing_direction:
                         context.message = f"Spin RNG target reached: 0x{live_seed:08X}. Trigger the encounter now."
                         return True
+                    context.message = (
+                        f"Spin RNG target 0x{live_seed:08X} reached with the wrong facing direction; replanning."
+                    )
+                    return False
 
                 if previous_live_seed is not None and live_seed != previous_live_seed:
                     passed = seed_was_passed(
