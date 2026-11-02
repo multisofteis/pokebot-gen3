@@ -2,11 +2,11 @@ from typing import Generator
 
 from modules.battle_state import BattleOutcome
 from modules.context import context
-from modules.gui.multi_select_window import Selection, ask_for_choice, ask_for_confirmation
+from modules.gui.multi_select_window import Selection, ask_for_choice, ask_for_choice_scroll, ask_for_confirmation
 from modules.items import get_item_bag, get_item_by_name
 from modules.player import get_player, get_player_avatar
 from modules.pokemon_party import get_opponent_party
-from modules.rng_manipulation import SearchCriteria, calibrate_generation_offset, read_live_rng_seed
+from modules.rng_manipulation import NATURES, SearchCriteria, calibrate_generation_offset, read_live_rng_seed
 from modules.runtime import get_sprites_path
 from ._asserts import assert_item_exists_in_bag, assert_player_has_poke_balls, assert_boxes_or_party_can_fit_pokemon
 from ._interface import BotMode
@@ -95,22 +95,62 @@ class FishingMode(BotMode):
 
         self._offered_fishing_rng_target = True
         if ask_for_confirmation(
-            "Fishing RNG timing is calibrated. Would you like to target a shiny Pokémon?",
+            "Fishing RNG timing is calibrated. Would you like to configure a target Pokémon?",
             window_title="Fishing RNG Target",
         ):
-            player = get_player()
-            criteria = SearchCriteria(shiny=True, tid=player.trainer_id, sid=player.secret_id)
-            result = yield from fish_to_rng_target(
-                criteria,
-                trigger_offset=self._calibrated_fishing_trigger_offset,
-                tid=player.trainer_id,
-                sid=player.secret_id,
+            icon = get_sprites_path() / "items" / "Old Rod.png"
+            shiny_option = ask_for_choice(
+                [Selection(option, icon) for option in ("Any", "Shiny", "Non-shiny")],
+                window_title="Shiny Requirement",
             )
-            if result is None:
-                context.message = "No shiny fishing target was reached. Resuming normal fishing."
-                yield from fish(loop=True)
-        else:
-            yield from fish(loop=True)
+            nature_option = ask_for_choice_scroll(
+                [Selection("Any Nature", icon)] + [Selection(nature, icon) for nature in NATURES],
+                window_title="Target Nature",
+                options_per_row=5,
+                visible_rows=3,
+            )
+            iv_option = ask_for_choice(
+                [
+                    Selection("Any IVs", icon),
+                    Selection("20+ in every stat", icon),
+                    Selection("25+ in every stat", icon),
+                    Selection("30+ in every stat", icon),
+                    Selection("31 in every stat", icon),
+                ],
+                window_title="Minimum IVs",
+            )
+
+            if shiny_option is not None and nature_option is not None and iv_option is not None:
+                player = get_player()
+                shiny_filter = True if shiny_option == "Shiny" else False if shiny_option == "Non-shiny" else None
+                nature_filter = None if nature_option == "Any Nature" else nature_option
+                min_iv = {
+                    "Any IVs": 0,
+                    "20+ in every stat": 20,
+                    "25+ in every stat": 25,
+                    "30+ in every stat": 30,
+                    "31 in every stat": 31,
+                }[iv_option]
+                criteria = SearchCriteria(
+                    shiny=shiny_filter,
+                    tid=player.trainer_id if shiny_filter is not None else None,
+                    sid=player.secret_id if shiny_filter is not None else None,
+                    nature=nature_filter,
+                    min_ivs=(min_iv,) * 6,
+                )
+                if shiny_filter is not None or nature_filter is not None or min_iv > 0:
+                    result = yield from fish_to_rng_target(
+                        criteria,
+                        trigger_offset=self._calibrated_fishing_trigger_offset,
+                        tid=player.trainer_id,
+                        sid=player.secret_id,
+                    )
+                    if result is None:
+                        context.message = "No matching fishing target was reached. Resuming normal fishing."
+                        yield from fish(loop=True)
+                    return
+
+        yield from fish(loop=True)
 
     def _capture_fishing_trigger_seed(self) -> None:
         self._last_fishing_trigger_seed = read_live_rng_seed()
