@@ -156,6 +156,7 @@ def fish(
     """
     previous_task_state = object()
     prompt_action_sent = False
+    cast_action_sent = False
 
     while True:
         if stop_condition is not None and get_game_state() is GameState.OVERWORLD and stop_condition():
@@ -164,29 +165,41 @@ def fish(
         task_fishing = get_task("Task_Fishing")
         task_state = task_fishing.data[0] if task_fishing is not None else None
 
-        if task_fishing is None and get_game_state() is not GameState.OVERWORLD:
-            # Do not issue another rod input while a fishing encounter is in battle.
-            # Preserve the previous task state so fishing resumes after the battle.
+        if task_fishing is None:
+            if get_game_state() is not GameState.OVERWORLD:
+                # A battle or another game state is active; never cast into it.
+                yield
+                continue
+
+            # No fishing task means the rod must be cast. Send Select once,
+            # then wait for Task_Fishing to appear instead of spamming it.
+            if not cast_action_sent:
+                if before_cast is not None:
+                    before_cast()
+                context.emulator.press_button("Select")
+                cast_action_sent = True
+
+            previous_task_state = None
+            prompt_action_sent = False
             yield
+            if not loop:
+                break
             continue
+
+        # A task is now active, so the next task-free overworld period may cast.
+        cast_action_sent = False
 
         if task_state != previous_task_state:
             prompt_action_sent = False
 
-        if task_fishing is not None:
-            # In FRLG's Task_Fishing state machine, WAIT_FOR_A is the only
-            # state that requires a player input: it waits for A_BUTTON after
-            # the bite animation. The no-bite / got-away / encounter text
-            # states advance automatically when their text printer finishes.
-            # Waiting for is_waiting_for_input() here is incorrect because
-            # WAIT_FOR_A is not a script textbox wait.
-            if task_state == TaskFishing.WAIT_FOR_A.value and not prompt_action_sent:
-                context.emulator.press_button("A")
-                prompt_action_sent = True
+        # FRLG Fishing8 waits on gMain.newKeys & A_BUTTON. This is a fresh
+        # press edge, not a script/textbox input wait.
+        if task_state == TaskFishing.WAIT_FOR_A.value and not prompt_action_sent:
+            context.emulator.press_button("A")
+            prompt_action_sent = True
 
         previous_task_state = task_state
         yield
-
         if not loop:
             break
 
